@@ -128,3 +128,13 @@ test('proxy: setupCheck memberi tahu konfigurasi tanpa membocorkan key ke log', 
     assert.ok(q.logs.some(l => /BELUM diisi/.test(l)) && q.logs.some(l => /terlalu pendek/.test(l)));
     assert.equal(q.fetched.length, 0);
 });
+
+test('proxy: op ping membuktikan token tanpa memanggil Gemini dan tanpa memotong batas harian', () => {
+    const p = makeProxy({ DAILY_LIMIT: '1' });
+    assert.deepEqual(p.post({ token: 'tok-secret-1234567890', op: 'ping' }), { ok: true, status: 200, ping: true });
+    assert.deepEqual(p.post({ token: 'salah', op: 'ping' }), { proxyError: 'AUTH' });
+    assert.equal(p.fetched.length, 0);
+    assert.equal(p.store.USAGE, undefined);
+    assert.equal(p.post(good).ok, true);          // batas 1 masih utuh setelah beberapa ping
+    assert.deepEqual(makeProxy({ APP_TOKEN: '' }).post({ token: 'x', op: 'ping' }), { proxyError: 'CONFIG' });
+});

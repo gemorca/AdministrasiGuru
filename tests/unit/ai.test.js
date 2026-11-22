@@ -325,3 +325,66 @@ test('ping: sukses melaporkan model, gaya, dan token', async () => {
     assert.equal(r.style, 'format');
     assert.equal(r.tokens, 42);
 });
+
+// ---------- uji koneksi dua tahap ----------
+const proxyCfg = { mode: 'proxy', proxyUrl: 'https://script.google.com/macros/s/X/exec' };
+const pingOk = { status: 200, json: { ok: true, status: 200, ping: true } };
+const wrap = r => ({ status: 200, json: { ok: true, status: 200, data: r.json } });
+
+test('ping mode proxy: tahap 1 (op ping, tanpa Gemini) lalu tahap 2 (Gemini), urutan dan tahap dilaporkan', async () => {
+    const m = setup({ cfg: proxyCfg, secret: 'TOK', responses: [pingOk, wrap(ok('{"ok": true}'))] });
+    const stages = [];
+    const r = await AIService.ping(undefined, s => stages.push(s));
+    assert.deepEqual(stages, ['proxy', 'gemini']);
+    assert.equal(m.calls.length, 2);
+    assert.deepEqual(m.calls[0].body, { token: 'TOK', op: 'ping' });
+    assert.ok(m.calls[1].body.request);
+    assert.equal(r.ok, true); assert.ok(r.proxyMs >= 0);
+});
+
+test('ping mode langsung: hanya tahap Gemini', async () => {
+    const m = setup({ responses: [ok('{"ok": true}')] });
+    const stages = [];
+    const r = await AIService.ping(undefined, s => stages.push(s));
+    assert.deepEqual(stages, ['gemini']); assert.equal(m.calls.length, 1); assert.equal(r.proxyMs, null);
+});
+
+test('ping: galat tahap 1 membedakan token salah, kode proxy lama, belum dikonfigurasi, tak terjangkau', async () => {
+    setup({ cfg: proxyCfg, responses: [{ status: 200, json: { proxyError: 'AUTH' } }] });
+    await assert.rejects(AIService.ping(), e => e.code === 'PROXY_AUTH');
+    setup({ cfg: proxyCfg, responses: [{ status: 200, json: { proxyError: 'BAD_REQUEST' } }] });
+    await assert.rejects(AIService.ping(), e => e.code === 'PROXY_OLD' && /New version/.test(e.message));
+    setup({ cfg: proxyCfg, responses: [{ status: 200, json: { ok: true, status: 200, data: {} } }] });   // proxy lama tanpa ping
+    await assert.rejects(AIService.ping(), e => e.code === 'PROXY_OLD');
+    setup({ cfg: proxyCfg, responses: [{ status: 200, json: { proxyError: 'CONFIG' } }] });
+    await assert.rejects(AIService.ping(), e => e.code === 'PROXY_CONFIG' && /GEMINI_API_KEY/.test(e.message));
+    setup({ cfg: proxyCfg, responses: [new TypeError('Failed to fetch')] });
+    await assert.rejects(AIService.ping(), e => e.code === 'PROXY_UNREACHABLE' && /Siapa saja/.test(e.message));
+    setup({ cfg: proxyCfg, responses: [() => ({ status: 200, json: async () => { throw new Error('<html>'); } })] });
+    await assert.rejects(AIService.ping(), e => e.code === 'PROXY_CONFIG');
+});
+
+test('ping: proxy tidak menjawab -> PROXY_TIMEOUT (tahap 1) dan Gemini tidak dihubungi', async () => {
+    const hang = (url, init) => new Promise((res, rej) => init.signal.addEventListener('abort', () => rej(new Error('aborted'))));
+    const m = setup({ cfg: proxyCfg, responses: [hang] });
+    AIService.use({ proxyPingMs: 20 });
+    await assert.rejects(AIService.ping(), e => e.code === 'PROXY_TIMEOUT' && /Executions/.test(e.message));
+    assert.equal(m.calls.length, 1);
+    AIService.use({ proxyPingMs: 20000 });
+});
+
+test('ping: proxy sehat tetapi Gemini lambat -> TIMEOUT dengan pesan yang menyebut tahap 2 dan ms proxy', async () => {
+    const hang = (url, init) => new Promise((res, rej) => init.signal.addEventListener('abort', () => rej(new Error('aborted'))));
+    setup({ cfg: proxyCfg, responses: [pingOk, hang] });
+    AIService.use({ pingMs: 25 });
+    await assert.rejects(AIService.ping(), e => e.code === 'TIMEOUT' && e.stage === 'gemini' && /Proxy terhubung/.test(e.message) && /60 detik/.test(e.message));
+    setup({ responses: [hang] });
+    await assert.rejects(AIService.ping(), e => e.code === 'TIMEOUT' && /VPN/.test(e.message));
+    AIService.use({ pingMs: 60000 });
+});
+
+test('ping: prasyarat dicek sebelum jaringan', async () => {
+    const m = setup({ cfg: { enabled: false } });
+    await assert.rejects(AIService.ping(), e => e.code === 'DISABLED');
+    assert.equal(m.calls.length, 0);
+});

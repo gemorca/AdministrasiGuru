@@ -434,15 +434,22 @@ def run_tahap2(br):
     ctx = new_ctx(br)
     def proxy_ok(rec):
         env = rec['body'] or {}
-        return 200, ({"proxyError": "AUTH"} if env.get('token') != SECRET else {"ok": True, "status": 200, "data": GEM_OK})
+        if env.get('token') != SECRET: return 200, {"proxyError": "AUTH"}
+        if env.get('op') == 'ping': return 200, {"ok": True, "status": 200, "ping": True}
+        return 200, {"ok": True, "status": 200, "data": GEM_OK}
     page, errs = open_page(ctx, INDEX, t1_seed()); log = mock_ai(ctx, proxy_ok)
     ai_form(page)
     st = page.evaluate("({ai: JSON.parse(localStorage.getItem('g_set')).ai, sec: localStorage.getItem('g_ai_secret'), g_set: localStorage.getItem('g_set')})")
     check('W2a pengaturan AI tersimpan; rahasia di kunci terpisah, bukan di g_set',
           st['ai']['enabled'] and st['ai']['proxyUrl'] == PROXY_URL and st['sec'] == SECRET and SECRET not in st['g_set'], st['ai'])
+    before_msg = ai_msg(page)
+    check('W2a2 setelah simpan, pesan jujur: menyuruh Uji Koneksi, tidak mengklaim "siap dipakai"', 'Uji Koneksi' in before_msg and 'siap dipakai' not in before_msg, before_msg)
     msg = ai_test(page)
-    check('W2b Uji Koneksi via proxy berhasil dan melaporkan model dan gaya keluaran', 'Koneksi berhasil' in msg and 'gemini-3.8-flash' in msg and '"format"' in msg, msg)
-    r = log[0]
+    check('W2b Uji Koneksi via proxy berhasil: melaporkan waktu proxy, model, dan gaya keluaran', 'Koneksi berhasil' in msg and 'Proxy' in msg and 'gemini-3.8-flash' in msg and '"format"' in msg, msg)
+    check('W2b2 uji koneksi proxy: permintaan 1 = op ping (tanpa isi Gemini), permintaan 2 = Gemini', log[0]['body'].get('op') == 'ping' and 'request' not in log[0]['body'] and 'request' in log[1]['body'], [list(x['body']) for x in log])
+    page.reload(); page.wait_for_function("document.querySelectorAll('#navMenu button').length>0"); goto_view(page, 'Pengaturan')
+    check('W2b3 setelah uji berhasil status menjadi "Terhubung" dan tersimpan setelah muat ulang', 'Terhubung' in ai_msg(page), ai_msg(page))
+    r = log[1]
     check('W2c permintaan ke proxy: text/plain, memuat token, TANPA API key Gemini, skema JSON dikirim',
           r['headers'].get('content-type', '').startswith('text/plain') and r['body']['token'] == SECRET and r['body']['model'] == 'gemini-3.8-flash'
           and 'x-goog-api-key' not in r['headers'] and 'responseFormat' in r['body']['request']['generationConfig'], r['headers'])
@@ -453,7 +460,7 @@ def run_tahap2(br):
     # token salah -> pesan jelas
     page.fill('#setAiSecret', 'token-salah'); page.evaluate("AIUI.save()")
     msg = ai_test(page)
-    check('W2f token salah: pesan jelas dengan kode PROXY_AUTH', 'PROXY_AUTH' in msg and 'Token aplikasi ditolak' in msg, msg)
+    check('W2f token salah: pesan jelas dengan kode PROXY_AUTH dan tahap 1', 'PROXY_AUTH' in msg and 'Token aplikasi ditolak' in msg and 'tahap 1' in msg, msg)
     ctx.close()
 
     # --- W3 jalur langsung + CORS + retry 429 + fallback gaya

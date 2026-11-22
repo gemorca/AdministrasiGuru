@@ -9,8 +9,8 @@ Buka `index.html` langsung di browser (tidak perlu server). Perilaku semua menu 
 - `apps-script/`: `Code.gs` (proxy Gemini) dan `PANDUAN.md` (langkah pasang).
 - `js/app/`: `state.js`, `ui.js`, `app.js` (navigasi, init), `boot.js` (titik masuk).
 - `js/modules/`: satu berkas per menu.
-- `tests/unit/`: 85 uji unit. Jalankan `node --test tests/unit/*.test.js`.
-- `tests/run_tests.py`: 128 uji browser (termasuk menjalankan uji unit). Jalankan `python3 tests/run_tests.py [file_asli.html]`. Butuh `pip install playwright` dan Chromium. Argumen opsional = file asli untuk uji paritas.
+- `tests/unit/`: 92 uji unit. Jalankan `node --test tests/unit/*.test.js`.
+- `tests/run_tests.py`: 131 uji browser (termasuk menjalankan uji unit). Jalankan `python3 tests/run_tests.py [file_asli.html]`. Butuh `pip install playwright` dan Chromium. Argumen opsional = file asli untuk uji paritas.
 - `tools/build_from_original.py`: skrip yang menghasilkan proyek ini dari file asli (untuk jejak audit).
 
 ## Aturan pengembangan

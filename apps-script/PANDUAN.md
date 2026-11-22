@@ -32,6 +32,9 @@ Tujuan: API key Gemini tersimpan di Google, bukan di browser guru. Aplikasi hany
 | Pesan | Penyebab dan solusi |
 |---|---|
 | Token aplikasi ditolak (PROXY_AUTH) | Token di aplikasi berbeda dengan `APP_TOKEN`. Samakan. |
+| Proxy tidak menjawab dalam 20 detik (PROXY_TIMEOUT) | Tahap 1 gagal. URL salah, deploy belum "Anyone", atau Apps Script tertahan. Buka URL Web App di tab baru: harus tampil `{"ok":true,"service":"gemini-proxy"}`. Cek tab Executions apakah permintaan masuk. |
+| Proxy masih memakai kode lama (PROXY_OLD) | Tempel ulang `Code.gs` terbaru lalu Deploy > Manage deployments > Edit > Version: New version. |
+| Gemini tidak menjawab dalam 60 detik (TIMEOUT, tahap 2) | Proxy sehat tetapi Gemini lambat/tertahan. Coba model lain (mis. `gemini-3.6-flash`), jalankan `setupCheck`, periksa kuota dan penagihan, lihat Executions. |
 | Proxy tidak merespons dengan benar (PROXY_CONFIG) | Deploy belum "Anyone", atau URL bukan berakhiran `/exec`, atau belum deploy versi baru setelah mengubah kode. |
 | Batas harian proxy tercapai (PROXY_LIMIT) | Naikkan `DAILY_LIMIT` atau tunggu besok. |
 | API key atau token tidak valid (AUTH) | `GEMINI_API_KEY` salah, dicabut, atau proyek dibatasi. Jalankan `setupCheck`. |

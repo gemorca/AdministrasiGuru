@@ -44,6 +44,10 @@ function doPost(e) {
   try { req = JSON.parse(e.postData.contents); } catch (err) { return json_({ proxyError: 'BAD_REQUEST' }); }
   if (!safeEquals_(String(req.token || ''), token)) return json_({ proxyError: 'AUTH' });
 
+  // Uji cepat dari aplikasi: membuktikan URL, deploy, dan token benar tanpa memanggil Gemini
+  // dan tanpa mengurangi batas harian.
+  if (req.op === 'ping') return json_({ ok: true, status: 200, ping: true });
+
   var model = String(req.model || '');
   if (!MODEL_RE.test(model)) return json_({ proxyError: 'BAD_MODEL' });
   if (!req.request || typeof req.request !== 'object') return json_({ proxyError: 'BAD_REQUEST' });

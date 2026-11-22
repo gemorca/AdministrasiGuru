@@ -51,7 +51,9 @@ const AIUI = (() => {
         refreshUsage();
         applyVisibility();
         const st = AIService.status();
-        msg(st.ready ? 'Fitur AI siap dipakai.' : (st.enabled ? 'Fitur AI aktif tetapi belum lengkap dikonfigurasi atau belum disetujui.' : 'Fitur AI sedang dimatikan.'), st.ready ? 'ok' : 'info');
+        if (st.ready && c.lastTestOk) msg('Terhubung. Uji koneksi terakhir berhasil: ' + new Date(c.lastTestOk).toLocaleString('id-ID') + '.', 'ok');
+        else if (st.ready) msg('Pengaturan sudah lengkap, tetapi koneksi BELUM diuji. Tekan "Uji Koneksi" untuk memastikan benar-benar tersambung.', 'info');
+        else msg(st.enabled ? 'Fitur AI aktif tetapi pengaturan belum lengkap atau privasi belum disetujui.' : 'Fitur AI sedang dimatikan.', 'info');
     }
 
     function save() {
@@ -76,7 +78,7 @@ const AIUI = (() => {
         if (errs.length) { msg(errs.join(' '), 'err'); return false; }
 
         if (secretIn) Store.secretSet(secretIn);
-        if (mode !== c.mode || proxyUrl !== c.proxyUrl || model !== c.model) c.styleResolved = null;
+        if (mode !== c.mode || proxyUrl !== c.proxyUrl || model !== c.model || secretIn) { c.styleResolved = null; c.lastTestOk = null; }
         c.enabled = enabled; c.mode = mode; c.proxyUrl = proxyUrl; c.model = model;
         c.allowNames = $('setAiAllowNames').checked;
         if (privacy && !c.privacyAckAt) c.privacyAckAt = new Date().toISOString();
@@ -97,12 +99,17 @@ const AIUI = (() => {
         }
         testing = true;
         const btn = $('aiTestBtn'); if (btn) { btn.disabled = true; btn.innerText = 'Menguji...'; }
-        msg('Menguji koneksi ke Gemini...', 'info');
+        let stage = '';
+        const stageText = s => s === 'proxy' ? 'Tahap 1 dari 2: menghubungi proxy Apps Script (maks 20 detik)...' : 'Tahap 2 dari 2: menghubungi Gemini (maks 60 detik, mohon tunggu)...';
+        msg(st.mode === 'proxy' ? stageText('proxy') : stageText('gemini'), 'info');
         try {
-            const r = await AIService.ping();
-            msg(`Koneksi berhasil. Model ${r.model}, format keluaran terstruktur "${r.style}", ${r.ms} ms.`, 'ok');
+            const r = await AIService.ping(undefined, s => { stage = s; msg(stageText(s), 'info'); });
+            cfg().lastTestOk = new Date().toISOString();
+            saveAllData();
+            msg(`Koneksi berhasil.${r.proxyMs !== null ? ` Proxy ${r.proxyMs} ms.` : ''} Model ${r.model}, format keluaran terstruktur "${r.style}", Gemini menjawab dalam ${r.ms} ms.`, 'ok');
         } catch (e) {
-            msg(`Gagal [${e.code || 'ERROR'}]: ${e.message}`, 'err');
+            const where = (e.stage === 'gemini' || stage === 'gemini') && st.mode === 'proxy' ? ' (tahap 2: Gemini)' : (stage === 'proxy' ? ' (tahap 1: proxy)' : '');
+            msg(`Gagal [${e.code || 'ERROR'}]${where}: ${e.message}`, 'err');
         } finally {
             testing = false;
             if (btn) { btn.disabled = false; btn.innerText = 'Uji Koneksi'; }

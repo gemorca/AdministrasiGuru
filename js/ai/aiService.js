@@ -46,7 +46,9 @@ const AIService = (() => {
         usageSet: v => { try { localStorage.setItem(USAGE_KEY, JSON.stringify(v)); } catch (_) {} },
         today: () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; },
         now: () => Date.now(),
-        onStyleResolved: null
+        onStyleResolved: null,
+        proxyPingMs: 20000,
+        pingMs: 60000
     };
     function use(overrides) { Object.assign(deps, overrides || {}); }
 
@@ -70,7 +72,10 @@ const AIService = (() => {
         PROXY_AUTH: 'Token aplikasi ditolak oleh proxy Apps Script. Periksa token di Pengaturan > AI.',
         PROXY_LIMIT: 'Batas harian proxy Apps Script tercapai. Coba lagi besok atau naikkan DAILY_LIMIT di Script Properties.',
         PROXY_CONFIG: 'Proxy Apps Script tidak merespons dengan benar. Pastikan deploy sebagai Web App dengan akses "Siapa saja" dan URL berakhiran /exec.',
-        NETWORK: 'Gagal terhubung ke layanan AI. Periksa koneksi internet lalu coba lagi.'
+        NETWORK: 'Gagal terhubung ke layanan AI. Periksa koneksi internet lalu coba lagi.',
+        PROXY_TIMEOUT: 'Proxy Apps Script tidak menjawab dalam 20 detik. Periksa: URL Web App benar (berakhiran /exec), deploy "Siapa saja" (Anyone), dan buka tab Executions di Apps Script untuk melihat apakah permintaan masuk.',
+        PROXY_OLD: 'Proxy Apps Script masih memakai kode lama. Tempel ulang isi apps-script/Code.gs, lalu Deploy > Manage deployments > Edit > Version: New version > Deploy.',
+        PROXY_UNREACHABLE: 'URL Web App tidak dapat dijangkau dari browser. Penyebab umum: deploy belum "Siapa saja" (Anyone), URL salah, atau salinan URL dari tab Test deployment (harus URL Web app berakhiran /exec).'
     };
     function err(code, extra) { return new AIError(code, (extra && extra.message) || MESSAGES[code] || code, extra); }
 
@@ -304,11 +309,64 @@ const AIService = (() => {
         }
     }
 
-    /** Uji koneksi: satu permintaan terstruktur kecil. Membuktikan key/token, model, dan gaya skema. */
-    async function ping(signal) {
+    /** Tahap 1 uji koneksi (hanya mode proxy): membuktikan URL, deploy, dan token tanpa memanggil Gemini. */
+    async function pingProxy(signal) {
+        const cfg = deps.config();
+        const t0 = deps.now();
+        const ctl = new AbortController();
+        const onAbort = () => ctl.abort('user');
+        if (signal) { if (signal.aborted) throw err('ABORTED'); signal.addEventListener('abort', onAbort, { once: true }); }
+        const timer = setTimeout(() => ctl.abort('timeout'), deps.proxyPingMs);
+        let res;
+        try {
+            res = await deps.fetch(cfg.proxyUrl, {
+                method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ token: deps.secret(), op: 'ping' }), signal: ctl.signal
+            });
+        } catch (e) {
+            if (ctl.signal.aborted) throw err(ctl.signal.reason === 'timeout' ? 'PROXY_TIMEOUT' : 'ABORTED');
+            throw err(deps.online() ? 'PROXY_UNREACHABLE' : 'OFFLINE');
+        } finally { clearTimeout(timer); if (signal) signal.removeEventListener('abort', onAbort); }
+        let env = null;
+        try { env = await res.json(); } catch (_) { throw err('PROXY_CONFIG'); }
+        if (!env || typeof env !== 'object') throw err('PROXY_CONFIG');
+        if (env.proxyError === 'AUTH') throw err('PROXY_AUTH');
+        if (env.proxyError === 'CONFIG') throw err('PROXY_CONFIG', { message: 'Proxy belum lengkap: isi GEMINI_API_KEY dan APP_TOKEN di Script properties.' });
+        if (env.proxyError === 'BAD_REQUEST' || env.proxyError === 'BAD_MODEL') throw err('PROXY_OLD');
+        if (env.proxyError) throw err('PROXY_CONFIG', { message: MESSAGES.PROXY_CONFIG + ' (' + env.proxyError + ')' });
+        if (env.ping !== true) throw err('PROXY_OLD');
+        return deps.now() - t0;
+    }
+
+    /**
+     * Uji koneksi dua tahap. Mode proxy: (1) proxy dan token, (2) Gemini lewat proxy. Mode langsung: hanya (2).
+     * Galat menyebut tahap yang gagal supaya penyebabnya jelas.
+     */
+    async function ping(signal, onStage) {
+        const st = status();
+        if (!st.enabled) throw err('DISABLED');
+        if (!st.configured) throw err('NOT_CONFIGURED');
+        if (!st.privacyAck) throw err('PRIVACY');
+        if (!deps.online()) throw err('OFFLINE');
+        let proxyMs = null;
+        if (st.mode === 'proxy') {
+            if (onStage) onStage('proxy');
+            proxyMs = await pingProxy(signal);
+        }
+        if (onStage) onStage('gemini');
         const schema = { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] };
-        const r = await generate({ task: 'ping', prompt: 'Kembalikan JSON {"ok": true}.', schema, temperature: 0, maxTokens: 64, signal, timeoutMs: 30000 });
-        return { ok: r.data.ok === true, model: r.model, style: r.style, ms: r.ms, tokens: r.tokens };
+        try {
+            const r = await generate({ task: 'ping', prompt: 'Kembalikan JSON {"ok": true}.', schema, temperature: 0, maxTokens: 256, signal, timeoutMs: deps.pingMs });
+            return { ok: r.data.ok === true, model: r.model, style: r.style, ms: r.ms, tokens: r.tokens, proxyMs };
+        } catch (e) {
+            if (e.code === 'TIMEOUT') {
+                e.message = proxyMs !== null
+                    ? `Proxy terhubung (${proxyMs} ms), tetapi Gemini tidak menjawab dalam 60 detik. Kemungkinan: model tidak tersedia atau sangat lambat (coba model lain, mis. gemini-3.6-flash), kuota/penagihan bermasalah, atau eksekusi Apps Script tertahan. Buka tab Executions di Apps Script untuk melihat statusnya.`
+                    : 'Gemini tidak menjawab dalam 60 detik. Periksa koneksi internet, VPN atau firewall yang memblokir generativelanguage.googleapis.com, dan nama model.';
+                e.stage = 'gemini';
+            }
+            throw e;
+        }
     }
 
     return { AIError, use, sendableSchema, status, generate, ping, usageToday, MESSAGES, DEFAULT_MODEL, buildBody, mapHttpError, extract, parseJson };
