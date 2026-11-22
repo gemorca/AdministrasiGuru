@@ -1,0 +1,2176 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Administrasi Guru Terpadu - Tahap 18</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="vendor/tailwind.js" onerror="document.write('<script src=&quot;https://cdn.tailwindcss.com&quot;><\/script>')"></script>
+    <!-- Chart.js CDN -->
+    <script src="vendor/chart.umd.js" onerror="document.write('<script src=&quot;https://cdn.jsdelivr.net/npm/chart.js&quot;><\/script>')"></script>
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .view-section { display: none; animation: fadeIn 0.3s ease-in-out; }
+        .view-section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        @media print {
+            aside, header, .no-print, button, .chart-container, nav { display: none !important; }
+            main { padding: 0 !important; margin: 0 !important; background: white !important; overflow: visible !important; height: auto !important; width: 100% !important; }
+            .view-section { display: none !important; }
+            .view-section.active-print { display: block !important; }
+            body { background: white; height: auto; overflow: visible; }
+            table { border-collapse: collapse; width: 100%; font-size: 11px; }
+            th, td { border: 1px solid #000 !important; padding: 5px !important; color: #000 !important; }
+            .print-header { display: block !important; text-align: center; margin-bottom: 20px; }
+            .shadow-sm, .rounded-xl, .border { box-shadow: none !important; border-radius: 0 !important; border: 1px solid #cbd5e1 !important; }
+            @page { size: A4 portrait; margin: 1.5cm; }
+        }
+        .print-header { display: none; }
+    </style>
+</head>
+<body class="text-slate-800 flex h-screen overflow-hidden bg-slate-50">
+
+    <!-- MODAL CUSTOM NOTIFICATION -->
+    <div id="customModal" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-2xl border border-slate-100 text-center">
+            <div id="modalIcon" class="text-4xl mb-1">ℹ️</div>
+            <h3 id="modalTitle" class="font-bold text-lg text-slate-800">Informasi</h3>
+            <p id="modalMessage" class="text-sm text-slate-600">Pesan sistem...</p>
+            <div id="modalActionContainer" class="flex justify-center gap-2 pt-2">
+                <button onclick="closeModal()" class="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow hover:bg-blue-700 w-full transition">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL CONFIRM -->
+    <div id="modalConfirm" class="fixed inset-0 bg-slate-900/60 z-[60] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-2xl border border-slate-100 text-center">
+            <div class="text-4xl mb-1 text-red-500">⚠️</div>
+            <h3 class="font-bold text-lg text-slate-800">Konfirmasi</h3>
+            <p id="confirmMessage" class="text-sm text-slate-600">Apakah Anda yakin?</p>
+            <div class="flex justify-center gap-2 pt-2">
+                <button onclick="closeConfirm()" class="px-5 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-bold shadow hover:bg-slate-200 w-full transition">Batal</button>
+                <button onclick="executeConfirm()" class="px-5 py-2.5 bg-red-600 text-white rounded-xl text-sm font-bold shadow hover:bg-red-700 w-full transition">Ya, Lanjutkan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL ASESMEN -->
+    <div id="modalAssessment" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
+        <form id="formAssessment" class="bg-white rounded-2xl p-6 w-full max-w-md space-y-4 shadow-2xl" onsubmit="saveAssessment(event)">
+            <h4 class="font-bold text-lg border-b pb-2 text-slate-800">Tambah Asesmen Baru</h4>
+            <input type="hidden" id="asmType">
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Jenis Asesmen</label>
+                <input type="text" id="asmTypeDisplay" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm bg-slate-50 text-slate-500 font-bold" readonly>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Nama Asesmen *</label>
+                <input type="text" id="asmName" placeholder="Contoh: Formatif Bab 1" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+            </div>
+            <div id="asmTopicInputGroup">
+                <label class="block text-xs font-bold text-slate-700 mb-1">Topik / Lingkup Materi Pembelajaran</label>
+                <input type="text" id="asmTopic" placeholder="Contoh: Tata Surya (Opsional)" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div id="asmTpInputGroup" class="hidden">
+                <label class="block text-xs font-bold text-slate-700 mb-1">Tujuan Pembelajaran (TP) Terkait *</label>
+                <select id="asmTp" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></select>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('modalAssessment').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold hover:bg-slate-200 transition">Batal</button>
+                <button type="submit" class="px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold shadow hover:bg-blue-700 transition">Simpan & Beri Nilai</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- MODAL ANALISIS SUMATIF -->
+    <div id="modalAnalisisSumatif" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-4xl space-y-4 shadow-2xl flex flex-col max-h-[90vh]">
+            <div class="border-b pb-2 flex justify-between items-center flex-shrink-0">
+                <h4 class="font-bold text-lg text-slate-800">📊 Analisis Penilaian Sumatif (Berdasarkan Nilai)</h4>
+                <button type="button" onclick="document.getElementById('modalAnalisisSumatif').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-2xl font-bold">&times;</button>
+            </div>
+            <div class="overflow-y-auto flex-1 border border-slate-200 rounded-xl">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-slate-100/90 border-b text-slate-600 sticky top-0 z-10 backdrop-blur-sm">
+                        <tr>
+                            <th class="p-3">Nama Siswa</th>
+                            <th class="p-3 text-center">Nilai Sumatif</th>
+                            <th class="p-3">Rincian Per Asesmen</th>
+                            <th class="p-3 text-center">Ketuntasan</th>
+                            <th class="p-3">Tindak Lanjut</th>
+                        </tr>
+                    </thead>
+                    <tbody id="analisisSumatifBody" class="divide-y divide-slate-100"></tbody>
+                </table>
+            </div>
+            <div class="flex justify-end pt-2 flex-shrink-0">
+                <button type="button" onclick="document.getElementById('modalAnalisisSumatif').classList.add('hidden')" class="px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold shadow hover:bg-blue-700 transition">Tutup Analisis</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL PRATINJAU DRAF SOAL AI -->
+    <div id="modalAiPreview" class="fixed inset-0 bg-slate-900/60 z-[60] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-2xl space-y-3 shadow-2xl flex flex-col max-h-[90vh]">
+            <h4 id="aiPreviewTitle" class="font-bold text-lg border-b pb-2 text-slate-800"></h4>
+            <p class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2">Ini draf dari AI. Periksa kunci dan isi setiap butir. Hanya butir yang dicentang yang disimpan ke Bank Soal.</p>
+            <div id="aiPreviewInfo" class="text-xs text-slate-600"></div>
+            <div id="aiPreviewList" class="overflow-y-auto flex-1 space-y-2"></div>
+            <div class="flex justify-end gap-2">
+                <button type="button" onclick="document.getElementById('modalAiPreview').classList.add('hidden')" class="px-5 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">Buang Semua</button>
+                <button type="button" onclick="saveAiPreview()" class="px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold">Simpan Butir Terpilih</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL PRIVASI AI -->
+    <div id="modalAiPrivacy" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-lg space-y-3 shadow-2xl">
+            <h4 class="font-bold text-lg border-b pb-2 text-slate-800">Pemberitahuan Privasi AI</h4>
+            <ul class="text-sm text-slate-700 list-disc pl-5 space-y-1">
+                <li>Permintaan AI dikirim ke layanan Google Gemini lewat internet.</li>
+                <li>Nama, NIS, dan kontak siswa/wali diganti kode (mis. [S01]) sebelum dikirim, kecuali Anda mengizinkannya di Pengaturan.</li>
+                <li>Hanya data yang dibutuhkan fitur tersebut yang dikirim, bukan seluruh data aplikasi.</li>
+                <li>Dokumen referensi atau kisi-kisi yang Anda unggah dikirim ke Gemini apa adanya (PDF tidak dapat disaring). Jangan unggah dokumen yang memuat data siswa.</li>
+                <li>Ketentuan penggunaan data oleh Google dapat berbeda antara layanan gratis dan berbayar. Periksa ketentuan yang berlaku.</li>
+                <li>Anda tetap bertanggung jawab atas kebijakan perlindungan data anak di sekolah Anda, dan atas pemeriksaan hasil AI sebelum dipakai.</li>
+            </ul>
+            <div class="flex justify-end gap-2">
+                <button onclick="document.getElementById('modalAiPrivacy').classList.add('hidden')" class="px-5 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">Batal</button>
+                <button onclick="AIUI.acceptPrivacy()" class="px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold">Saya Mengerti dan Setuju</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL INPUT NILAI -->
+    <div id="modalScoreEntry" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-xl space-y-3 shadow-2xl flex flex-col max-h-[90vh]">
+            <h4 id="scoreEntryTitle" class="font-bold text-lg border-b pb-2 text-slate-800"></h4>
+            <input type="hidden" id="scoreEntryAsmId">
+            <p class="text-xs text-slate-500">Isi nilai 0 sampai 100. Kosongkan bila siswa belum memiliki nilai; kolom kosong tidak dihitung sebagai 0.</p>
+            <div class="overflow-y-auto flex-1 border border-slate-200 rounded-xl"><table class="w-full"><tbody id="scoreEntryBody"></tbody></table></div>
+            <div id="scoreEntryError" class="hidden text-xs bg-red-50 text-red-700 border border-red-200 rounded-xl p-3"></div>
+            <div class="flex justify-end gap-2">
+                <button type="button" onclick="document.getElementById('modalScoreEntry').classList.add('hidden')" class="px-5 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">Batal</button>
+                <button type="button" onclick="saveScoreEntry()" class="px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold">Simpan Nilai</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL TINDAK LANJUT REMEDIAL/PENGAYAAN -->
+    <div id="modalFollowUp" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
+        <form id="formFollowUp" class="bg-white rounded-2xl p-6 w-full max-w-lg space-y-3 shadow-2xl max-h-[90vh] overflow-y-auto" onsubmit="saveFollowUp(event)">
+            <h4 id="fuTitle" class="font-bold text-lg border-b pb-2 text-slate-800"></h4>
+            <input type="hidden" id="fuStudentId"><input type="hidden" id="fuEditId">
+            <div class="grid grid-cols-2 gap-3">
+                <div><label class="block text-xs font-bold text-slate-700 mb-1">Jenis</label>
+                    <select id="fuType" class="w-full border border-slate-200 rounded-xl p-2 text-sm"><option>Remedial</option><option>Pengayaan</option></select></div>
+                <div><label class="block text-xs font-bold text-slate-700 mb-1">Tanggal</label>
+                    <input type="date" id="fuDate" class="w-full border border-slate-200 rounded-xl p-2 text-sm"></div>
+                <div><label class="block text-xs font-bold text-slate-700 mb-1">Status</label>
+                    <select id="fuStatus" class="w-full border border-slate-200 rounded-xl p-2 text-sm"><option>Direncanakan</option><option>Selesai</option></select></div>
+                <div><label class="block text-xs font-bold text-slate-700 mb-1">Nilai (opsional)</label>
+                    <input type="text" inputmode="decimal" id="fuScore" class="w-full border border-slate-200 rounded-xl p-2 text-sm"></div>
+            </div>
+            <div><label class="block text-xs font-bold text-slate-700 mb-1">Catatan / bentuk kegiatan</label>
+                <textarea id="fuNote" rows="2" class="w-full border border-slate-200 rounded-xl p-2 text-sm"></textarea></div>
+            <div id="fuError" class="hidden text-xs bg-red-50 text-red-700 border border-red-200 rounded-xl p-3"></div>
+            <div class="flex justify-end gap-2">
+                <button type="button" onclick="document.getElementById('modalFollowUp').classList.add('hidden')" class="px-5 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">Tutup</button>
+                <button type="submit" class="px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold">Simpan Tindak Lanjut</button>
+            </div>
+            <div class="border-t pt-2"><div class="text-xs font-bold text-slate-700 mb-1">Riwayat</div><div id="fuHistory"></div></div>
+        </form>
+    </div>
+
+    <!-- MODAL BANK SOAL MANUAL -->
+    <div id="modalQuestionManual" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
+        <form id="formQuestionManual" class="bg-white rounded-2xl p-6 w-full max-w-lg space-y-4 shadow-2xl" onsubmit="saveQuestionManual(event)">
+            <h4 class="font-bold text-lg border-b pb-2 text-slate-800">Tambah Soal Manual</h4>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Kode Soal *</label>
+                <input type="text" id="qManCode" placeholder="Contoh: IPA-VII-001" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" required>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Pertanyaan *</label>
+                <textarea id="qManText" rows="3" placeholder="Tuliskan pertanyaan di sini..." class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" required></textarea>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Bentuk Soal</label>
+                    <select id="qManType" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm">
+                        <option>Pilihan Ganda</option>
+                        <option>Pilihan Ganda Kompleks</option>
+                        <option>Benar-Salah</option>
+                        <option>Isian Singkat</option>
+                        <option>Menjodohkan</option>
+                        <option>Uraian</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Tingkat Kesulitan</label>
+                    <select id="qManDiff" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm">
+                        <option>Mudah</option><option>Sedang</option><option>Sulit</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Kunci Jawaban</label>
+                <input type="text" id="qManKey" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Pembahasan</label>
+                <textarea id="qManExp" rows="2" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none"></textarea>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('modalQuestionManual').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold">Batal</button>
+                <button type="submit" class="px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold shadow">Simpan Soal</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- MODAL GENERATE SOAL AI -->
+    <div id="modalQuestionAI" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
+        <form id="formQuestionAI" class="bg-white rounded-2xl p-6 w-full max-w-lg space-y-4 shadow-2xl" onsubmit="processGenerateSoalAI(event)">
+            <h4 class="font-bold text-lg border-b pb-2 text-slate-800 flex items-center gap-2">🪄 Generate Soal AI (Berdasarkan Kisi-Kisi)</h4>
+            
+            <div class="bg-amber-50 p-3 rounded-xl border border-amber-200 text-xs text-amber-900 space-y-2">
+                <p class="font-bold flex items-center gap-1">⚠️ Langkah Wajib:</p>
+                <p>Sebelum meng-generate butir soal, silakan unggah file dokumen Kisi-Kisi Anda (.pdf, .docx, .txt) atau pilih dari TP terdaftar.</p>
+                <div class="pt-1">
+                    <label class="bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-bold text-[11px] shadow hover:bg-indigo-700 transition cursor-pointer inline-flex items-center gap-1.5">
+                        📤 Unggah Dokumen Kisi-Kisi <input type="file" accept=".pdf,.docx,.txt" class="hidden" onchange="handleKisiUpload(event)">
+                    </label>
+                    <span id="uploadedKisiStatus" class="ml-2 font-semibold text-indigo-900 italic text-[11px]">Belum ada file kisi-kisi diunggah</span>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Pilih TP / Referensi Kisi-Kisi Tersimpan *</label>
+                <select id="aiQuesTp" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
+                </select>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Jumlah Soal</label>
+                    <input type="number" id="aiCount" min="1" max="30" value="3" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Tingkat Kesulitan</label>
+                    <select id="aiDiff" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none">
+                        <option value="HOTS (C4-C6)">HOTS (C4-C6)</option>
+                        <option value="Sedang (C3)">Sedang (C3)</option>
+                        <option value="Mudah (C1-C2)">Mudah (C1-C2)</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Bentuk Soal *</label>
+                <select id="aiType" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none">
+                    <option value="Sesuai Kisi-Kisi">Sesuai Kisi-Kisi (Otomatis)</option>
+                    <option value="Campuran">Campuran (Otomatis Acak)</option>
+                    <option value="Pilihan Ganda">Pilihan Ganda</option>
+                    <option value="Pilihan Ganda Kompleks">Pilihan Ganda Kompleks</option>
+                    <option value="Benar-Salah">Benar-Salah</option>
+                    <option value="Isian Singkat">Isian Singkat</option>
+                    <option value="Menjodohkan">Menjodohkan</option>
+                    <option value="Uraian">Uraian</option>
+                </select>
+            </div>
+            <div class="flex justify-end gap-2 pt-4 border-t mt-4">
+                <button type="button" onclick="document.getElementById('modalQuestionAI').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold hover:bg-slate-200 transition">Batal</button>
+                <button type="submit" id="btnGenAI" class="px-5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow hover:bg-indigo-700 transition flex items-center gap-2">✨ Generate Sekarang</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- SIDEBAR -->
+    <aside id="sidebar" class="w-64 bg-slate-900 text-white flex flex-col hidden md:flex h-full shadow-xl z-20 transition-all duration-300 flex-shrink-0">
+        <div class="p-5 flex items-center gap-3 border-b border-slate-800">
+            <div class="bg-blue-600 p-2.5 rounded-xl text-xl shadow-lg">👨‍🏫</div>
+            <div>
+                <h1 class="font-bold text-base leading-tight">Admin Guru</h1>
+                <p id="sidePeriodName" class="text-xs text-blue-400 font-semibold mt-0.5">Memuat...</p>
+            </div>
+        </div>
+        <nav class="flex-1 overflow-y-auto py-4 px-3 space-y-1" id="navMenu">
+            <!-- Navigation items generated by JS -->
+        </nav>
+        <div class="p-4 border-t border-slate-800 text-xs text-slate-400 text-center">
+            <p class="font-semibold text-slate-300">Sistem Administrasi v20.0</p>
+            <p class="text-[10px] mt-0.5">Rapor, Portofolio & Proyek P5</p>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTAINER -->
+    <div class="flex-1 flex flex-col h-screen overflow-hidden relative w-full">
+        <!-- HEADER -->
+        <header class="bg-white shadow-sm border-b border-slate-200 px-4 sm:px-6 py-3 flex justify-between items-center z-10 flex-shrink-0">
+            <div class="flex items-center gap-4">
+                <button class="md:hidden text-slate-500 hover:text-slate-800 text-2xl font-bold" onclick="document.getElementById('sidebar').classList.toggle('hidden')">☰</button>
+                <div>
+                    <h2 id="headerSchool" class="font-bold text-slate-800 text-base sm:text-lg leading-none">SMP Negeri 1 Talaga Jaya</h2>
+                    <p id="headerInfo" class="text-xs text-slate-500 font-medium mt-1">Memuat Data...</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <div class="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+                    <span class="text-xs font-bold text-slate-500">Kelas:</span>
+                    <select id="globalClassSelector" class="bg-transparent text-xs font-bold text-blue-700 focus:outline-none cursor-pointer" onchange="changeGlobalClass(this.value)">
+                        <!-- Options generated by JS -->
+                    </select>
+                </div>
+                <div id="archiveBanner" class="hidden bg-amber-100 text-amber-800 text-xs px-3 py-1 rounded-full font-bold border border-amber-300">🔒 Arsip</div>
+                <div class="text-right hidden sm:block">
+                    <p id="headerTeacher" class="text-sm font-bold text-slate-700 leading-none">Guru Mapel</p>
+                    <span id="headerActivePeriod" class="text-[10px] font-bold text-white bg-blue-600 px-2.5 py-0.5 rounded-full mt-1 inline-block shadow-sm">Periode</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- VIEW CONTAINER -->
+        <main class="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50 relative" id="mainContainer">
+            
+            <!-- PRINT TEMPLATE HEADER -->
+            <div id="printHeaderTemplate" class="print-header">
+                <h2 class="text-xl font-bold uppercase" id="printSchoolName">SMP NEGERI 1 TALAGA JAYA</h2>
+                <h3 class="text-lg font-bold" id="printDocCategory">ADMINISTRASI PEMBELAJARAN</h3>
+                <p class="text-sm mt-1" id="printSubInfo">Mata Pelajaran | Kelas | Semester | Tahun</p>
+                <hr class="border-black my-3 border-2">
+                <h4 class="text-lg font-bold mb-4 uppercase" id="printDocTitle">JUDUL DOKUMEN</h4>
+            </div>
+
+            <!-- VIEW: DASHBOARD -->
+            <div id="view-dashboard" class="view-section active space-y-6">
+                <div class="flex justify-between items-end flex-wrap gap-4">
+                    <div>
+                        <h3 class="text-2xl font-bold text-slate-800">Dashboard Utama</h3>
+                        <p class="text-slate-500 text-sm">Ringkasan kondisi kelas dan pembelajaran kelas aktif.</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="switchView('reports')" class="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-slate-700 transition flex items-center gap-2">📄 Lihat Laporan</button>
+                        <button onclick="switchView('backup')" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition flex items-center gap-2">💾 Backup Data</button>
+                    </div>
+                </div>
+
+                <!-- STATS CARDS -->
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+                        <p class="text-slate-500 text-xs font-bold uppercase tracking-wider">Peserta Didik Kelas</p>
+                        <h4 class="text-3xl font-bold text-blue-600 mt-1.5" id="dTotalSiswa">0</h4>
+                        <span class="text-xs text-slate-400 font-medium" id="dGenderInfo">L: 0 | P: 0</span>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+                        <p class="text-slate-500 text-xs font-bold uppercase tracking-wider">Rata-rata Kehadiran</p>
+                        <h4 class="text-3xl font-bold text-emerald-600 mt-1.5" id="dAvgHadir">0%</h4>
+                        <span class="text-xs text-slate-400 font-medium" id="dMeetInfo">0 Pertemuan</span>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+                        <p class="text-slate-500 text-xs font-bold uppercase tracking-wider">Rata-rata Nilai Kelas</p>
+                        <h4 class="text-3xl font-bold text-indigo-600 mt-1.5" id="dAvgNilai">0</h4>
+                        <span class="text-xs text-slate-400 font-medium" id="dScoreInfo">KKTP: 75</span>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+                        <p class="text-slate-500 text-xs font-bold uppercase tracking-wider">Ketuntasan Kelas</p>
+                        <h4 class="text-3xl font-bold text-orange-600 mt-1.5" id="dKetuntasan">0%</h4>
+                        <span class="text-xs text-slate-400 font-medium" id="dPassInfo">0 Tuntas | 0 Belum</span>
+                    </div>
+                </div>
+
+                <!-- CHARTS -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 chart-container">
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                        <h4 class="font-bold text-sm mb-4 text-slate-700">Distribusi Ketuntasan Belajar</h4>
+                        <div class="h-64"><canvas id="chartTuntas"></canvas></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                        <h4 class="font-bold text-sm mb-4 text-slate-700">Analisis Tindak Lanjut Siswa</h4>
+                        <div class="h-64"><canvas id="chartTindak"></canvas></div>
+                    </div>
+                </div>
+
+                <!-- WARNING / NOTIFICATION PANEL -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-3">
+                    <h4 class="font-bold text-slate-700 flex items-center gap-2">⚠️ Siswa Perlu Perhatian Khusus</h4>
+                    <div id="dWarnings" class="space-y-2 max-h-48 overflow-y-auto"></div>
+                </div>
+            </div>
+
+            <!-- VIEW: STUDENTS -->
+            <div id="view-students" class="view-section space-y-5">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                        <h3 class="text-2xl font-bold text-slate-800">Data Peserta Didik Kelas Aktif</h3>
+                        <p class="text-slate-500 text-sm">Kelola daftar siswa untuk kelas yang sedang dipilih.</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button onclick="exportStudentsCSV()" class="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-sm font-bold shadow hover:bg-emerald-700 transition flex items-center gap-1.5">📥 Export CSV</button>
+                        <label class="bg-amber-600 text-white px-3.5 py-2 rounded-xl text-sm font-bold shadow hover:bg-amber-700 transition flex items-center gap-1.5 cursor-pointer">
+                            📤 Import CSV <input type="file" id="importCsvFile" accept=".csv" class="hidden" onchange="importStudentsCSV(event)">
+                        </label>
+                        <button onclick="openModalStudent()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition">+ Tambah Siswa</button>
+                    </div>
+                </div>
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div class="p-4 border-b bg-slate-50/70 flex flex-col sm:flex-row justify-between gap-3">
+                        <input type="text" id="searchStudent" placeholder="🔍 Cari nama atau NISN..." class="w-full sm:w-80 px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" oninput="renderStudents()">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-bold text-slate-500">Urutkan:</span>
+                            <select id="sortStudent" class="border border-slate-200 px-3.5 py-2 rounded-xl text-xs font-medium focus:outline-none" onchange="renderStudents()">
+                                <option value="no">No. Urut</option>
+                                <option value="az">Nama A–Z</option>
+                                <option value="za">Nama Z–A</option>
+                                <option value="nis">NIS/NISN</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-100/70 border-b text-slate-600">
+                                <tr>
+                                    <th class="px-4 py-3 font-bold w-12">No</th>
+                                    <th class="px-4 py-3 font-bold">NIS/NISN</th>
+                                    <th class="px-4 py-3 font-bold">Nama Lengkap</th>
+                                    <th class="px-4 py-3 font-bold w-20">L/P</th>
+                                    <th class="px-4 py-3 font-bold">Kelas</th>
+                                    <th class="px-4 py-3 font-bold text-center no-print w-32">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="studentTableBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: CLASSES -->
+            <div id="view-classes" class="view-section space-y-6">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h3 class="text-2xl font-bold text-slate-800">Manajemen Kelas</h3>
+                        <p class="text-slate-500 text-sm">Kelola daftar rombongan belajar dalam periode aktif.</p>
+                    </div>
+                    <button onclick="openModalClass()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition">+ Tambah Kelas</button>
+                </div>
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden p-6">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-100/70 border-b text-slate-600">
+                                <tr>
+                                    <th class="p-3">Nama Kelas</th>
+                                    <th class="p-3">Tingkat</th>
+                                    <th class="p-3">Fase</th>
+                                    <th class="p-3 text-center">Jumlah Siswa</th>
+                                    <th class="p-3 text-center">Status</th>
+                                    <th class="p-3 text-center">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="classListBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: SCHEDULE -->
+            <div id="view-schedule" class="view-section space-y-6">
+                <div class="flex justify-between items-center flex-wrap gap-4">
+                    <div>
+                        <h3 class="text-2xl font-bold text-slate-800">Jadwal Mengajar & Jam Pelajaran</h3>
+                        <p class="text-slate-500 text-sm">Atur jadwal mingguan guru dan deteksi bentrok ruang/waktu.</p>
+                    </div>
+                    <button onclick="openModalSchedule()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition">+ Tambah Jadwal</button>
+                </div>
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-4">
+                    <h4 class="font-bold text-slate-800 border-b pb-2">Jadwal Mingguan Guru</h4>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs text-left border border-slate-200">
+                            <thead class="bg-slate-100 text-slate-700">
+                                <tr>
+                                    <th class="p-2 border text-center">Jam Ke-</th>
+                                    <th class="p-2 border text-center">Senin</th>
+                                    <th class="p-2 border text-center">Selasa</th>
+                                    <th class="p-2 border text-center">Rabu</th>
+                                    <th class="p-2 border text-center">Kamis</th>
+                                    <th class="p-2 border text-center">Jumat</th>
+                                    <th class="p-2 border text-center">Sabtu</th>
+                                </tr>
+                            </thead>
+                            <tbody id="scheduleGridBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: CURRICULUM -->
+            <div id="view-curriculum" class="view-section space-y-6">
+                <div class="flex justify-between items-center flex-wrap gap-4">
+                    <div>
+                        <h3 class="text-2xl font-bold text-slate-800">📚 Data Kurikulum</h3>
+                        <p class="text-slate-500 text-sm">Daftar Capaian Pembelajaran, TP, ATP, IKTP & KKTP yang telah dianalisis.</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <label class="bg-amber-600 text-white px-3.5 py-2 rounded-xl text-sm font-bold shadow hover:bg-amber-700 transition flex items-center gap-2 cursor-pointer">
+                            📤 Unggah TP Mandiri
+                            <input type="file" accept=".txt,.csv" class="hidden" onchange="importTP(event)">
+                        </label>
+                        <label class="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-sm font-bold shadow hover:bg-emerald-700 transition flex items-center gap-2 cursor-pointer">
+                            📤 Unggah Buku / Materi
+                            <input type="file" accept=".pdf,.docx,.txt" class="hidden" onchange="handleFileUpload(event, 'Kurikulum')">
+                        </label>
+                        <button onclick="printReport('view-curriculum', 'ANALISIS CAPAIAN PEMBELAJARAN (CP) & TP')" class="bg-slate-800 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak</button>
+                        <button onclick="openAnalisisCP()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition flex items-center gap-2">+ Tambah Analisis CP</button>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left border-collapse">
+                            <thead class="bg-slate-100/70 text-slate-700 border border-slate-300 text-xs">
+                                <tr>
+                                    <th class="p-3 border border-slate-300 min-w-[250px]">Teks Capaian Pembelajaran (CP)</th>
+                                    <th class="p-3 border border-slate-300 min-w-[120px] text-center">Level Kognitif</th>
+                                    <th class="p-3 border border-slate-300 min-w-[160px]">Kompetensi</th>
+                                    <th class="p-3 border border-slate-300 min-w-[180px]">Materi Pokok</th>
+                                    <th class="p-3 border border-slate-300 min-w-[200px]">Tujuan Pembelajaran (TP)</th>
+                                    <th class="p-3 border border-slate-300 min-w-[200px]">Alur Tujuan Pembelajaran (ATP)</th>
+                                    <th class="p-3 border border-slate-300 min-w-[200px]">Indikator Ketercapaian (IKTP)</th>
+                                    <th class="p-3 border border-slate-300 min-w-[200px]">Kriteria Ketuntasan (KKTP)</th>
+                                    <th class="p-3 border border-slate-300 w-24 text-center no-print">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="curriculumTableBody" class="divide-y divide-slate-200">
+                                <!-- Konten dari JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- VIEW: ANALISIS CP -->
+            <div id="view-analisis-cp" class="view-section space-y-6">
+                <div class="flex justify-between items-center flex-wrap gap-4">
+                    <div>
+                        <h3 class="text-2xl font-bold text-slate-800">🪄 Analisis Capaian Pembelajaran (AI)</h3>
+                        <p class="text-slate-500 text-sm">Tempelkan teks CP Anda, lalu klik "Analisis & Generate Semua Kolom" untuk memecah CP secara instan.</p>
+                    </div>
+                    <button type="button" onclick="switchView('curriculum')" class="bg-slate-100 text-slate-700 px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-200 transition">Kembali ke Daftar Kurikulum</button>
+                </div>
+
+                <form id="formCPUnified" class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 space-y-4" onsubmit="saveCPUnified(event)">
+                    <input type="hidden" id="uniCpId">
+                    
+                    <div class="bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+                        <label class="block text-xs font-bold text-blue-900 mb-1">1. Teks Capaian Pembelajaran (CP) *</label>
+                        <textarea id="uniCpDesc" rows="4" class="w-full border border-blue-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" required placeholder="Salin tempel paragraf CP dari Kemdikbud di sini..."></textarea>
+                        
+                        <label class="block text-xs font-bold text-blue-900 mt-3 mb-1">2. Topik / Materi Spesifik (Opsional - Agar TP Lebih Terarah)</label>
+                        <input type="text" id="uniSpecificTopic" class="w-full border border-blue-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Contoh: Tata Surya, Klasifikasi Makhluk Hidup, Sistem Pencernaan...">
+                        
+                        <!-- Indikator Referensi Materi Aktif -->
+                        <div id="cpRefIndicator" class="hidden mt-3 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-semibold flex items-center gap-2">
+                            📚 Referensi Materi Aktif: <span id="cpRefName" class="font-bold text-emerald-900"></span>
+                        </div>
+                        
+                        <div class="flex justify-end mt-4">
+                            <button data-ai type="button" onclick="analyzeAndGenerateAllAI()" id="btnGenAllAI" class="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow hover:bg-indigo-700 transition flex items-center gap-2">🪄 Analisis & Generate Semua Kolom</button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Level Kognitif</label>
+                            <select id="uniCogLevel" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none bg-slate-50">
+                                <option value="C1 (Mengingat)">C1 (Mengingat)</option>
+                                <option value="C2 (Memahami)">C2 (Memahami)</option>
+                                <option value="C3 (Menerapkan)">C3 (Menerapkan)</option>
+                                <option value="C4 (Menganalisis)">C4 (Menganalisis)</option>
+                                <option value="C5 (Mengevaluasi)">C5 (Mengevaluasi)</option>
+                                <option value="C6 (Mencipta)">C6 (Mencipta)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Kompetensi (Kata Kerja)</label>
+                            <textarea id="uniComp" rows="3" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm bg-slate-50 focus:outline-none" placeholder="Hasil ekstrak AI..."></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Materi Pokok / Konten</label>
+                            <textarea id="uniMat" rows="3" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm bg-slate-50 focus:outline-none" placeholder="Hasil ekstrak AI..."></textarea>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4 mt-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Tujuan Pembelajaran (TP)</label>
+                            <textarea id="uniTp" rows="4" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" placeholder="1. Mampu...\n2. Memahami..."></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Alur Tujuan Pembelajaran (ATP)</label>
+                            <textarea id="uniAtp" rows="4" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" placeholder="1. Pengenalan...\n2. Observasi..."></textarea>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Indikator Ketercapaian (IKTP)</label>
+                            <textarea id="uniIktp" rows="4" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" placeholder="- Menjelaskan ciri-ciri..."></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Kriteria Ketuntasan (KKTP)</label>
+                            <textarea id="uniKktp" rows="4" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" placeholder="Interval / Rubrik Penilaian..."></textarea>
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-end gap-2 pt-4 border-t">
+                        <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition">💾 Simpan Analisis</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- VIEW: PROYEK PROFIL LULUSAN AI -->
+            <div id="view-p5" class="view-section space-y-6">
+                <div class="flex justify-between items-center flex-wrap gap-4 no-print">
+                    <div>
+                        <h3 class="text-2xl font-bold text-slate-800">🎯 Proyek Dimensi Profil Lulusan</h3>
+                        <p class="text-slate-500 text-sm">Generate ide proyek berbasis dimensi profil lulusan (Karakter, Kompetensi) menggunakan AI.</p>
+                    </div>
+                    <button onclick="openModalProyekAI()" class="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-indigo-700 transition flex items-center gap-2">🪄 Generate Proyek AI</button>
+                </div>
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-4 no-print">
+                    <div class="flex justify-between items-center flex-wrap gap-3">
+                        <input type="text" id="searchP5" placeholder="🔍 Cari judul atau dimensi proyek..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderP5()">
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-indigo-50 border-b border-indigo-100 text-indigo-800">
+                                <tr>
+                                    <th class="p-3 w-12">No</th>
+                                    <th class="p-3">Judul Proyek (AI)</th>
+                                    <th class="p-3">Topik Utama</th>
+                                    <th class="p-3 w-48">Dimensi Profil</th>
+                                    <th class="p-3">Deskripsi Singkat</th>
+                                    <th class="p-3 text-center w-36">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="p5TableBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- KANVAS MODUL P5 -->
+                <div id="p5ModuleContainer" class="hidden bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4 mt-6">
+                    <div class="flex justify-between items-center border-b pb-2 no-print">
+                        <h4 class="font-bold text-slate-800">Modul Proyek P5 (AI Generated)</h4>
+                        <div class="flex gap-2">
+                            <button onclick="downloadModulP5Doc()" class="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-700 transition">📥 Download DOC</button>
+                            <button onclick="printReport('view-p5', 'MODUL PROYEK PENGUATAN PROFIL PELAJAR PANCASILA')" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-700 transition">🖨️ Cetak</button>
+                            <button onclick="document.getElementById('p5ModuleContainer').classList.add('hidden')" class="bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-200 transition">Tutup</button>
+                        </div>
+                    </div>
+                    <div id="p5ModuleContent" class="prose text-sm text-slate-700 space-y-3 bg-slate-50 p-4 rounded-xl border"></div>
+                </div>
+            </div>
+
+            <!-- VIEW: GENERATOR -->
+            <div id="view-generator" class="view-section space-y-6">
+                <div class="flex justify-between items-center flex-wrap gap-4 no-print">
+                    <div>
+                        <h3 class="text-2xl font-bold text-slate-800">Generator Perangkat Pembelajaran AI</h3>
+                        <p class="text-slate-500 text-sm">Buat Modul Ajar, LKPD, dan Asesmen secara otomatis berdasarkan CP/TP tersimpan.</p>
+                    </div>
+                    <label class="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-emerald-700 transition flex items-center gap-2 cursor-pointer">
+                        📤 Unggah Referensi Materi
+                        <input type="file" accept=".pdf,.docx,.txt" class="hidden" onchange="handleFileUpload(event, 'Generator Modul Ajar')">
+                    </label>
+                </div>
+                
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4 max-w-2xl no-print">
+                    <h4 class="font-bold text-slate-800 border-b pb-2">Wizard Generator Modul Ajar</h4>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Pilih Tujuan Pembelajaran (TP)</label>
+                        <select id="genTpSelect" class="w-full border border-slate-200 rounded-xl p-2.5 text-sm focus:outline-none"></select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Model Pembelajaran</label>
+                        <select id="genModel" class="w-full border border-slate-200 rounded-xl p-2.5 text-sm focus:outline-none">
+                            <option>Project Based Learning (PjBL)</option>
+                            <option>Problem Based Learning (PBL)</option>
+                            <option>Discovery Learning</option>
+                            <option>Inquiry Learning</option>
+                            <option>JIGSAW</option>
+                            <option>STAD</option>
+                            <option>THINK PAIR SHARE</option>
+                            <option>GROUP INVESTIGATION</option>
+                            <option>NUMBER HEAD TOGETHER</option>
+                            <option>STEM</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Jumlah Pertemuan</label>
+                        <select id="genMeetings" class="w-full border border-slate-200 rounded-xl p-2.5 text-sm focus:outline-none"><option value="1">1 pertemuan</option><option value="2" selected>2 pertemuan</option><option value="3">3 pertemuan</option></select>
+                    </div>
+                    <button data-ai onclick="generateModulAjarAI()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold text-sm shadow hover:bg-blue-700 transition">🪄 Generate Modul Ajar Otomatis</button>
+                </div>
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden no-print">
+                    <div class="p-4 border-b bg-slate-50/70 font-bold text-sm text-slate-700">Modul Ajar Tersimpan</div>
+                    <div class="overflow-x-auto"><table class="w-full text-sm text-left">
+                        <thead class="bg-slate-100/70 border-b text-slate-600"><tr><th class="px-4 py-2">Judul</th><th class="px-4 py-2">TP</th><th class="px-4 py-2">Model</th><th class="px-4 py-2">Disimpan</th><th class="px-4 py-2 text-center">Aksi</th></tr></thead>
+                        <tbody id="savedModulBody"></tbody>
+                    </table></div>
+                </div>
+                <div id="genResultContainer" class="hidden bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
+                    <h4 class="font-bold text-slate-800 border-b pb-2 flex justify-between items-center flex-wrap gap-2 no-print">
+                        <span>Hasil Modul Ajar (Review)</span>
+                        <div class="flex gap-2">
+                            <button onclick="saveModulAjar()" class="bg-emerald-600 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-emerald-700 transition">💾 Simpan Modul</button>
+                            <button onclick="downloadModulDoc()" class="bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-blue-700 transition">📥 Download DOC</button>
+                            <button onclick="printReport('view-generator', 'MODUL AJAR KURIKULUM MERDEKA')" class="bg-slate-800 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-slate-700 transition">🖨️ Cetak</button>
+                        </div>
+                    </h4>
+                    <div id="genResultContent" class="prose text-sm text-slate-700 space-y-3 bg-slate-50 p-4 rounded-xl border"></div>
+                </div>
+            </div>
+
+            <!-- VIEW: BANK SOAL -->
+            <div id="view-bank-soal" class="view-section space-y-6">
+                <div class="flex justify-between items-center flex-wrap gap-4">
+                    <div>
+                        <h3 class="text-2xl font-bold text-slate-800">Bank Soal & Asesmen Terintegrasi</h3>
+                        <p class="text-slate-500 text-sm">Kelola butir soal, buat paket asesmen, dan analisis hasil ujian.</p>
+                    </div>
+                    <div class="flex gap-2 flex-wrap">
+                        <button onclick="printKisiKisi()" class="bg-teal-600 text-white px-3.5 py-2 rounded-xl text-sm font-bold shadow hover:bg-teal-700 transition flex items-center gap-2 no-print">🖨️ Kisi-Kisi</button>
+                        <button onclick="downloadKisiKisiDoc()" class="bg-cyan-600 text-white px-3.5 py-2 rounded-xl text-sm font-bold shadow hover:bg-cyan-700 transition flex items-center gap-2 no-print">📥 Download Kisi-Kisi</button>
+                        <button onclick="printKartuSoal()" class="bg-amber-600 text-white px-3.5 py-2 rounded-xl text-sm font-bold shadow hover:bg-amber-700 transition flex items-center gap-2 no-print">🖨️ Kartu Soal</button>
+                        <button onclick="printReport('view-bank-soal', 'BANK SOAL DAN ASESMEN TERINTEGRASI')" class="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-slate-700 transition flex items-center gap-2 no-print">🖨️ Cetak Soal</button>
+                        <button onclick="downloadSoalDoc()" class="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-sm font-bold shadow hover:bg-emerald-700 transition flex items-center gap-2 no-print">📥 Download Soal</button>
+                        <button onclick="openModalKisiKisiAI()" class="bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-purple-700 transition flex items-center gap-2 no-print">🪄 Generate Kisi-Kisi AI</button>
+                        <button onclick="openModalQuestionAI()" class="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-indigo-700 transition">🪄 Generate Soal AI (AKM/HOTS)</button>
+                        <button onclick="openModalQuestion()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition">+ Tambah Soal Manual</button>
+                    </div>
+                </div>
+                
+                <div id="bankSoalMainContent" class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-4">
+                    <div class="flex justify-between items-center flex-wrap gap-3">
+                        <input type="text" id="searchQuestion" placeholder="🔍 Cari teks soal atau kode..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderBankSoal()">
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-100/70 border-b text-slate-600">
+                                <tr>
+                                    <th class="p-3">Kode</th>
+                                    <th class="p-3">Pertanyaan</th>
+                                    <th class="p-3">Bentuk</th>
+                                    <th class="p-3">Level Kognitif</th>
+                                    <th class="p-3">Kesulitan</th>
+                                    <th class="p-3 text-center no-print">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bankSoalTableBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- KANVAS KISI-KISI SOAL (Sembunyi, muncul saat cetak) -->
+                <div id="printKisiKisiCanvas" class="hidden bg-white p-4">
+                    <h3 class="font-bold text-lg text-center uppercase mb-1">KISI-KISI PENULISAN SOAL</h3>
+                    <h4 class="font-bold text-md text-center uppercase mb-6" id="kkSchool">NAMA SEKOLAH</h4>
+                    <div class="flex justify-between text-xs mb-4 font-bold">
+                        <div class="space-y-1">
+                            <p>Mata Pelajaran : <span id="kkSubject">-</span></p>
+                            <p>Kurikulum &nbsp;&nbsp;&nbsp;: Merdeka</p>
+                        </div>
+                        <div class="space-y-1">
+                            <p>Tahun Pelajaran : <span id="kkPeriod">-</span></p>
+                            <p>Jumlah Soal &nbsp;&nbsp;&nbsp;: <span id="kkTotal">-</span></p>
+                        </div>
+                    </div>
+                    <table class="w-full border-collapse border border-black text-xs">
+                        <thead>
+                            <tr class="bg-slate-100">
+                                <th class="border border-black p-2 w-10">No</th>
+                                <th class="border border-black p-2">Kompetensi / Tujuan Pembelajaran</th>
+                                <th class="border border-black p-2">Materi Pokok</th>
+                                <th class="border border-black p-2">Indikator Soal</th>
+                                <th class="border border-black p-2 w-16 text-center">Level Kognitif</th>
+                                <th class="border border-black p-2 w-20 text-center">Bentuk Soal</th>
+                                <th class="border border-black p-2 w-16 text-center">No Soal</th>
+                            </tr>
+                        </thead>
+                        <tbody id="kisiKisiTbody"></tbody>
+                    </table>
+                </div>
+
+                <!-- KANVAS KARTU SOAL (Sembunyi, muncul saat cetak) -->
+                <div id="printKartuSoalCanvas" class="hidden bg-white p-4 space-y-6">
+                    <!-- Kartu-kartu soal akan digenerate di sini -->
+                </div>
+            </div>
+
+            <!-- VIEW: PORTOFOLIO (TAHAP 16) -->
+            <div id="view-portfolio" class="view-section space-y-6">
+                <div class="flex justify-between items-center flex-wrap gap-4">
+                    <div>
+                        <h3 class="text-2xl font-bold text-slate-800">📁 Manajemen Portofolio Siswa</h3>
+                        <p class="text-slate-500 text-sm">Kumpulkan dan kelola bukti karya, proyek, serta pencapaian siswa secara digital.</p>
+                    </div>
+                </div>
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-4">
+                    <div class="flex justify-between items-center flex-wrap gap-3">
+                        <input type="text" id="searchPortfolio" placeholder="🔍 Cari nama siswa..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderPortfolio()">
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-100/70 border-b text-slate-600">
+                                <tr>
+                                    <th class="p-3 w-12">No</th>
+                                    <th class="p-3">Nama Peserta Didik</th>
+                                    <th class="p-3 text-center">Total Karya Tersimpan</th>
+                                    <th class="p-3 text-center">Tugas & Karya Terakhir</th>
+                                    <th class="p-3 text-center">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="portfolioTableBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: MANAJEMEN TUGAS (TAHAP 18) -->
+            <div id="view-assignments" class="view-section space-y-6">
+                <div class="flex justify-between items-center flex-wrap gap-4">
+                    <div>
+                        <h3 class="text-2xl font-bold text-slate-800">Manajemen Tugas & Pengumpulan</h3>
+                        <p class="text-slate-500 text-sm">Buat LKPD, Proyek, dan pantau pengumpulan siswa beserta batas waktu (deadline).</p>
+                    </div>
+                    <div class="flex gap-2 flex-wrap">
+                        <button onclick="openModalAssignment()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition">+ Buat Tugas Baru</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100"><p class="text-xs text-slate-500 font-bold uppercase">Total Tugas</p><h4 class="text-2xl font-bold text-slate-800 mt-1" id="asgTotal">0</h4></div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100"><p class="text-xs text-slate-500 font-bold uppercase">Tugas Aktif</p><h4 class="text-2xl font-bold text-blue-600 mt-1" id="asgActive">0</h4></div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100"><p class="text-xs text-slate-500 font-bold uppercase">Sudah Dikumpulkan</p><h4 class="text-2xl font-bold text-emerald-600 mt-1" id="asgSubmitted">0</h4></div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100"><p class="text-xs text-slate-500 font-bold uppercase">Perlu Diperiksa</p><h4 class="text-2xl font-bold text-amber-600 mt-1" id="asgNeedReview">0</h4></div>
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-4">
+                    <div class="flex justify-between items-center flex-wrap gap-3">
+                        <input type="text" id="searchAssignment" placeholder="🔍 Cari judul tugas..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderAssignments()">
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-100/70 border-b text-slate-600">
+                                <tr>
+                                    <th class="p-3">Jenis</th>
+                                    <th class="p-3">Judul Tugas</th>
+                                    <th class="p-3">Tujuan Pembelajaran (TP)</th>
+                                    <th class="p-3">Deadline</th>
+                                    <th class="p-3 text-center">Status</th>
+                                    <th class="p-3 text-center">Pengumpulan</th>
+                                    <th class="p-3 text-center">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="assignmentTableBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- VIEW: KOMUNIKASI & WALI (TAHAP 19) -->
+            <div id="view-communication" class="view-section space-y-6">
+                <div class="flex justify-between items-center flex-wrap gap-4">
+                    <div>
+                        <h3 class="text-2xl font-bold text-slate-800">Komunikasi & Layanan Wali</h3>
+                        <p class="text-slate-500 text-sm">Pusat data orang tua, riwayat komunikasi, dan laporan perkembangan siswa.</p>
+                    </div>
+                    <div class="flex gap-2 bg-slate-200 p-1 rounded-xl no-print">
+                        <button onclick="switchCommTab('wali')" id="btnTabWali" class="px-4 py-2 rounded-lg text-sm font-bold bg-white text-blue-700 shadow-sm transition">Data Wali</button>
+                        <button onclick="switchCommTab('log')" id="btnTabLog" class="px-4 py-2 rounded-lg text-sm font-bold text-slate-600 hover:text-slate-800 transition">Catatan Komunikasi</button>
+                        <button onclick="switchCommTab('progress')" id="btnTabProgress" class="px-4 py-2 rounded-lg text-sm font-bold text-slate-600 hover:text-slate-800 transition">Perkembangan Siswa</button>
+                    </div>
+                </div>
+
+                <!-- TAB: DATA WALI -->
+                <div id="comm-wali" class="comm-content space-y-4">
+                    <div class="flex justify-between items-center">
+                        <input type="text" id="searchGuardian" placeholder="🔍 Cari nama wali..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderGuardians()">
+                        <button onclick="openModalGuardian()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition">+ Tambah Data Wali</button>
+                    </div>
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-100/70 border-b text-slate-600">
+                                <tr>
+                                    <th class="p-3">Nama Peserta Didik</th>
+                                    <th class="p-3">Nama Wali</th>
+                                    <th class="p-3">Hubungan</th>
+                                    <th class="p-3">Kontak (Telp/Email)</th>
+                                    <th class="p-3 text-center">Status Wali</th>
+                                    <th class="p-3 text-center w-24">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="guardianTableBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- TAB: CATATAN KOMUNIKASI -->
+                <div id="comm-log" class="comm-content space-y-4 hidden">
+                     <div class="flex justify-between items-center">
+                        <input type="text" id="searchComm" placeholder="🔍 Cari topik atau catatan..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderCommunications()">
+                        <button onclick="openModalCommunication()" class="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-indigo-700 transition">+ Tambah Catatan</button>
+                    </div>
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-100/70 border-b text-slate-600">
+                                <tr>
+                                    <th class="p-3">Tanggal</th>
+                                    <th class="p-3">Siswa</th>
+                                    <th class="p-3">Wali Terkait</th>
+                                    <th class="p-3">Topik Pembahasan</th>
+                                    <th class="p-3">Tindak Lanjut</th>
+                                    <th class="p-3 text-center">Status</th>
+                                    <th class="p-3 text-center w-24">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="communicationTableBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- TAB: PERKEMBANGAN SISWA -->
+                <div id="comm-progress" class="comm-content space-y-4 hidden">
+                    <div class="flex justify-between items-center flex-wrap gap-3 bg-white p-4 rounded-2xl shadow-sm border border-slate-100 no-print">
+                        <div class="flex items-center gap-3">
+                            <span class="text-xs font-bold text-slate-700">Pilih Peserta Didik:</span>
+                            <select id="progStudentSelect" class="border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none min-w-[200px]" onchange="renderStudentProgress(this.value)"></select>
+                        </div>
+                        <div class="flex gap-2">
+                            <button data-ai onclick="generateProgressAI()" class="bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-indigo-200 transition flex items-center gap-2">🪄 Draft Narasi AI</button>
+                            <button onclick="printReport('view-communication', 'LAPORAN PERKEMBANGAN PESERTA DIDIK')" class="bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Laporan</button>
+                        </div>
+                    </div>
+                    
+                    <div id="progReportCard" class="bg-white border border-slate-200 rounded-2xl p-8 space-y-6">
+                        <div class="text-center space-y-1 border-b pb-4">
+                            <h4 class="font-bold text-lg uppercase" id="prSchool">SMP NEGERI 1 TALAGA JAYA</h4>
+                            <h5 class="font-bold text-sm text-slate-600">LAPORAN PERKEMBANGAN PESERTA DIDIK</h5>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-4 text-xs text-slate-700">
+                            <div>
+                                <p><b>Nama Siswa:</b> <span id="prName">-</span></p>
+                                <p><b>NISN:</b> <span id="prNis">-</span></p>
+                                <p><b>Kelas:</b> <span id="prClass">-</span></p>
+                            </div>
+                            <div>
+                                <p><b>Semester / TP:</b> <span id="prPeriod">-</span></p>
+                                <p><b>Wali Utama:</b> <span id="prGuardian">-</span></p>
+                            </div>
+                        </div>
+
+                        <!-- Ringkasan Capaian -->
+                        <div>
+                            <h6 class="font-bold text-sm text-slate-800 mb-2 border-b pb-1">1. Ringkasan Capaian Akademik & Kehadiran</h6>
+                            <div class="grid grid-cols-4 gap-4 mb-4">
+                                <div class="bg-slate-50 p-3 rounded-lg border text-center"><p class="text-xs text-slate-500">Persentase Hadir</p><h5 class="text-lg font-bold text-emerald-600" id="prAttPct">0%</h5></div>
+                                <div class="bg-slate-50 p-3 rounded-lg border text-center"><p class="text-xs text-slate-500">Rata-rata Nilai</p><h5 class="text-lg font-bold text-blue-600" id="prAvgScore">0</h5></div>
+                                <div class="bg-slate-50 p-3 rounded-lg border text-center"><p class="text-xs text-slate-500">Tugas Terkumpul</p><h5 class="text-lg font-bold text-indigo-600" id="prTaskCount">0</h5></div>
+                                <div class="bg-slate-50 p-3 rounded-lg border text-center"><p class="text-xs text-slate-500">Status Ketuntasan</p><h5 class="text-lg font-bold text-slate-800" id="prPassStatus">-</h5></div>
+                            </div>
+                        </div>
+
+                        <!-- Catatan Perkembangan -->
+                        <div>
+                            <h6 class="font-bold text-sm text-slate-800 mb-2 border-b pb-1">2. Catatan Perkembangan & Apresiasi</h6>
+                            <textarea id="prNarrative" rows="4" class="w-full text-xs text-slate-700 bg-slate-50 border border-slate-200 p-3 rounded-xl focus:outline-none" placeholder="Klik 'Draft Narasi AI' untuk menyusun otomatis deskripsi perkembangan siswa berdasarkan data akademik dan kehadiran."></textarea>
+                        </div>
+
+                        <!-- Riwayat Komunikasi -->
+                        <div>
+                            <h6 class="font-bold text-sm text-slate-800 mb-2 border-b pb-1">3. Riwayat Tindak Lanjut / Komunikasi Wali</h6>
+                            <ul id="prCommList" class="text-xs text-slate-600 list-disc pl-4 space-y-1">
+                                <li class="italic text-slate-400">Belum ada riwayat komunikasi tercatat pada periode ini.</li>
+                            </ul>
+                        </div>
+
+                        <div class="flex justify-between pt-8 text-xs font-semibold text-center no-print mt-4">
+                            <div><p>Orang Tua / Wali</p><br><br><br><p class="underline">........................................</p></div>
+                            <div><p>Guru Mata Pelajaran</p><br><br><br><p class="underline" id="prTeacher">-</p></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: ATTENDANCE & JOURNAL -->
+            <div id="view-attendance" class="view-section space-y-6">
+                <div class="flex justify-between items-center flex-wrap gap-4">
+                    <div>
+                        <h3 class="text-2xl font-bold text-slate-800">Absensi & Jurnal Mengajar</h3>
+                        <p class="text-slate-500 text-sm">Catat kehadiran peserta didik dan jurnal pelaksanaan pembelajaran harian.</p>
+                    </div>
+                    <div class="flex gap-2 no-print">
+                        <button onclick="printReport('view-attendance', 'JURNAL MENGAJAR HARIAN')" class="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Jurnal</button>
+                    </div>
+                </div>
+
+                <form id="formMeeting" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4 no-print" onsubmit="event.preventDefault(); saveAttendance();">
+                    <h4 class="font-bold text-base text-slate-800 border-b pb-2 flex items-center gap-2">📋 Identitas Pertemuan & Jurnal Pembelajaran</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Pertemuan Ke- *</label>
+                            <input type="number" id="meetNum" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" required min="1">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Tanggal *</label>
+                            <input type="date" id="meetDate" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" required>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Jam Pelajaran *</label>
+                            <input type="text" id="meetTime" placeholder="Contoh: 1-2" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" required>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Model / Metode Pembelajaran</label>
+                            <select id="meetModel" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="Problem Based Learning">Problem Based Learning</option>
+                                <option value="Project Based Learning">Project Based Learning</option>
+                                <option value="Discovery Learning">Discovery Learning</option>
+                                <option value="Ceramah & Diskusi">Ceramah & Diskusi</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Materi / Topik Pembelajaran *</label>
+                            <input type="text" id="meetTopic" placeholder="Contoh: Sistem Pernapasan Manusia" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" required>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Media / Sumber Belajar</label>
+                            <input type="text" id="meetMedia" placeholder="Contoh: Buku Paket IPA Hal. 45" class="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                        </div>
+                    </div>
+                    <div class="pt-3 border-t border-slate-100 flex justify-between items-center">
+                        <button type="button" onclick="setAllPresent()" class="bg-emerald-100 text-emerald-800 px-4 py-2 rounded-xl text-xs font-bold border border-emerald-300 hover:bg-emerald-200 transition">🟢 Set Semua Hadir (H)</button>
+                        <span class="text-xs text-slate-500 font-medium" id="attStudentCountInfo">Total Siswa: 0</span>
+                    </div>
+                </form>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden no-print">
+                    <div class="p-4 border-b bg-slate-50 font-bold text-sm text-slate-700">Daftar Kehadiran Siswa Kelas Aktif</div>
+                    <div class="overflow-x-auto max-h-96">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-100/70 border-b sticky top-0 text-slate-600">
+                                <tr>
+                                    <th class="px-4 py-2.5 w-12">No</th>
+                                    <th class="px-4 py-2.5">NIS/NISN</th>
+                                    <th class="px-4 py-2.5">Nama Peserta Didik</th>
+                                    <th class="px-4 py-2.5 text-center">Status Kehadiran</th>
+                                    <th class="px-4 py-2.5">Keterangan</th>
+                                </tr>
+                            </thead>
+                            <tbody id="attendanceInputBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                    <div class="p-4 bg-slate-50/70 border-t border-slate-100 flex justify-end">
+                        <button onclick="saveAttendance()" class="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow hover:bg-blue-700 transition">💾 Simpan Absensi & Jurnal</button>
+                    </div>
+                </div>
+
+                <!-- RIWAYAT PERTEMUAN -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div class="p-4 border-b font-bold bg-slate-50/70 text-slate-700 flex justify-between items-center">
+                        <span>Riwayat Pertemuan & Jurnal Kelas</span>
+                        <input type="text" id="searchMeeting" placeholder="🔍 Cari materi..." class="px-3.5 py-1.5 border border-slate-200 rounded-xl text-xs w-56 focus:outline-none" oninput="renderMtgHistory()">
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-100/70 border-b text-slate-600">
+                                <tr>
+                                    <th class="px-4 py-3">Prt</th>
+                                    <th class="px-4 py-3">Tanggal</th>
+                                    <th class="px-4 py-3">Jam</th>
+                                    <th class="px-4 py-3">Materi / Topik</th>
+                                    <th class="px-4 py-3">Metode</th>
+                                    <th class="px-4 py-3 text-center">H / S / I / A</th>
+                                    <th class="px-4 py-3 text-center no-print">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="meetingHistoryBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: RECAP ATTENDANCE -->
+            <div id="view-recap-attendance" class="view-section space-y-5">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h3 class="text-2xl font-bold text-slate-800">Rekapitulasi Kehadiran</h3>
+                        <p class="text-slate-500 text-sm">Akumulasi kehadiran peserta didik kelas aktif.</p>
+                    </div>
+                    <div class="flex gap-2 no-print">
+                        <button onclick="printReport('view-recap-attendance', 'REKAPITULASI KEHADIRAN PESERTA DIDIK')" class="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak</button>
+                        <button onclick="exportAttendanceCSV()" class="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-emerald-700 transition">📥 Export CSV</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100"><p class="text-xs text-slate-500 font-bold uppercase">Total Pertemuan</p><h4 class="text-2xl font-bold text-slate-800 mt-1" id="rTotMtg">0</h4></div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100"><p class="text-xs text-slate-500 font-bold uppercase">Rata-rata Kehadiran</p><h4 class="text-2xl font-bold text-emerald-600 mt-1" id="rAvgHadirPct">0%</h4></div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100"><p class="text-xs text-slate-500 font-bold uppercase">Kehadiran ≥ 90%</p><h4 class="text-2xl font-bold text-blue-600 mt-1" id="rHighAtt">0 Siswa</h4></div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100"><p class="text-xs text-slate-500 font-bold uppercase">Kehadiran < 80%</p><h4 class="text-2xl font-bold text-red-600 mt-1" id="rLowAtt">0 Siswa</h4></div>
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div class="p-4 border-b bg-slate-50/70 flex flex-wrap gap-3 justify-between items-center">
+                        <input type="text" id="searchRecapAtt" placeholder="🔍 Cari nama siswa..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-64 focus:outline-none" oninput="renderRecapAtt()">
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-100/70 border-b text-slate-600">
+                                <tr>
+                                    <th class="px-4 py-3">No</th>
+                                    <th class="px-4 py-3">NISN</th>
+                                    <th class="px-4 py-3">Nama Siswa</th>
+                                    <th class="px-2 py-3 text-center">H</th>
+                                    <th class="px-2 py-3 text-center">S</th>
+                                    <th class="px-2 py-3 text-center">I</th>
+                                    <th class="px-2 py-3 text-center">A</th>
+                                    <th class="px-2 py-3 text-center">D</th>
+                                    <th class="px-3 py-3 text-center font-bold bg-blue-50 text-blue-700">% Hadir</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recapAttendanceBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: SCORES & GRADING -->
+            <div id="view-scores" class="view-section space-y-6">
+                <div class="flex justify-between items-center flex-wrap gap-4">
+                    <div>
+                        <h3 class="text-2xl font-bold text-slate-800">Daftar Nilai & Nilai Akhir</h3>
+                        <p class="text-slate-500 text-sm">Kelola asesmen Formatif, Sumatif, UTS, UAS, dan Nilai Akhir kelas aktif.</p>
+                    </div>
+                    <div class="flex gap-2 flex-wrap no-print">
+                        <button onclick="openAssessModal('Formatif')" class="bg-blue-100 text-blue-800 px-3.5 py-2 rounded-xl text-xs font-bold hover:bg-blue-200 transition">+ Formatif (Per TP)</button>
+                        <button onclick="openAssessModal('Sumatif')" class="bg-indigo-100 text-indigo-800 px-3.5 py-2 rounded-xl text-xs font-bold hover:bg-indigo-200 transition">+ Sumatif</button>
+                        <button onclick="analyzeSumatif()" class="bg-slate-100 text-slate-800 px-3.5 py-2 rounded-xl text-xs font-bold hover:bg-slate-200 transition">📊 Analisis Sumatif</button>
+                        <button onclick="openAssessModal('UTS')" class="bg-purple-100 text-purple-800 px-3.5 py-2 rounded-xl text-xs font-bold hover:bg-purple-200 transition">Input UTS</button>
+                        <button onclick="openAssessModal('UAS')" class="bg-teal-100 text-teal-800 px-3.5 py-2 rounded-xl text-xs font-bold hover:bg-teal-200 transition">Input UAS</button>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden no-print">
+                    <div class="p-4 border-b bg-slate-50/70 font-bold text-sm text-slate-700">Daftar Asesmen &amp; Input Nilai</div>
+                    <div class="overflow-x-auto"><table class="w-full text-sm text-left">
+                        <thead class="bg-slate-100/70 border-b text-slate-600"><tr>
+                            <th class="px-4 py-2">Jenis</th><th class="px-4 py-2">Nama</th><th class="px-4 py-2">Topik/TP</th><th class="px-4 py-2">Tanggal</th><th class="px-4 py-2 text-center">Terisi</th><th class="px-4 py-2 text-center">Aksi</th>
+                        </tr></thead>
+                        <tbody id="assessmentListBody"></tbody>
+                    </table></div>
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div class="p-4 border-b bg-slate-50/70 flex justify-between items-center flex-wrap gap-3">
+                        <input type="text" id="searchScore" placeholder="🔍 Cari siswa..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-64 focus:outline-none" oninput="renderRecapScores()">
+                        <div class="flex gap-2">
+                            <button onclick="printReport('view-scores', 'REKAPITULASI NILAI AKHIR')" class="bg-slate-800 text-white px-3.5 py-2 rounded-xl text-xs font-bold hover:bg-slate-700 transition">🖨️ Cetak</button>
+                            <button onclick="exportScoresCSV()" class="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold hover:bg-emerald-700 transition">📥 Export CSV</button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-100/70 border-b text-slate-600">
+                                <tr>
+                                    <th class="px-4 py-3">No</th>
+                                    <th class="px-4 py-3">NISN</th>
+                                    <th class="px-4 py-3">Nama Siswa</th>
+                                    <th class="px-2 py-3 text-center">R. Form</th>
+                                    <th class="px-2 py-3 text-center">R. Sum</th>
+                                    <th class="px-2 py-3 text-center">UTS</th>
+                                    <th class="px-2 py-3 text-center">UAS</th>
+                                    <th class="px-2 py-3 text-center">% Hadir</th>
+                                    <th class="px-3 py-3 text-center font-bold bg-blue-50 text-blue-800">N. Akhir</th>
+                                    <th class="px-2 py-3 text-center">Pred.</th>
+                                    <th class="px-4 py-3 text-center">Ketuntasan</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recapScoreBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: ANALISIS ULANGAN HARIAN -->
+            <div id="view-daily-analysis" class="view-section space-y-6">
+                <div class="flex justify-between items-center flex-wrap gap-4 no-print">
+                    <div>
+                        <h3 class="text-2xl font-bold text-slate-800">📊 Analisis Ulangan Harian</h3>
+                        <p class="text-slate-500 text-sm">Analisis butir soal, daya serap materi, dan ketuntasan klasikal secara otomatis.</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="openModalDailyTest()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition">+ Buat Analisis Baru</button>
+                    </div>
+                </div>
+
+                <!-- DAFTAR ANALISIS -->
+                <div id="dailyTestListContainer" class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-4 no-print">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-100/70 border-b text-slate-600">
+                                <tr>
+                                    <th class="p-3">Tanggal</th>
+                                    <th class="p-3">Materi / Topik Ulangan</th>
+                                    <th class="p-3 text-center">Jml Soal</th>
+                                    <th class="p-3 text-center">Rata-rata</th>
+                                    <th class="p-3 text-center">Ketuntasan</th>
+                                    <th class="p-3 text-center w-48">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dailyTestListBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- AREA DETAIL & INPUT (Sembunyi secara default) -->
+                <div id="dailyTestDetailArea" class="hidden bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-4">
+                    <!-- Tabel input akan digenerate melalui JavaScript -->
+                </div>
+            </div>
+
+            <!-- VIEW: REMEDIAL & ENRICHMENT -->
+            <div id="view-remedial" class="view-section space-y-6">
+                <div class="flex justify-between items-center flex-wrap gap-4">
+                    <div>
+                        <h3 class="text-2xl font-bold text-slate-800">Remedial & Pengayaan</h3>
+                        <p class="text-slate-500 text-sm">Identifikasi otomatis siswa remedial dan pengayaan kelas aktif.</p>
+                    </div>
+                </div>
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-100/70 border-b text-slate-600">
+                                <tr>
+                                    <th class="px-4 py-3">No</th>
+                                    <th class="px-4 py-3">Nama Siswa</th>
+                                    <th class="px-3 py-3 text-center">N. Akhir</th>
+                                    <th class="px-3 py-3 text-center">KKTP</th>
+                                    <th class="px-4 py-3">Kategori</th>
+                                    <th class="px-4 py-3">Rekomendasi</th>
+                                    <th class="px-4 py-3 text-center">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="analysisBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: HASIL BELAJAR & RAPOR -->
+            <div id="view-hasbi-rapor" class="view-section space-y-6">
+                <div class="flex justify-between items-center flex-wrap gap-4">
+                    <div>
+                        <h3 class="text-2xl font-bold text-slate-800">Analisis Hasil Belajar & Rapor Terintegrasi</h3>
+                        <p class="text-slate-500 text-sm">Profil hasil belajar, deskripsi capaian otomatis, dan cetak rapor peserta didik.</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button data-ai onclick="generateAllNarration()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition">🪄 Generate Narasi Otomatis</button>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden p-6 space-y-4">
+                    <div class="flex justify-between items-center flex-wrap gap-3">
+                        <div class="flex items-center gap-3">
+                            <span class="text-xs font-bold text-slate-700">Pilih Peserta Didik:</span>
+                            <select id="raporStudentSelect" class="border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none" onchange="renderStudentRapor(this.value)"></select>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="printStudentRapor()" class="bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Rapor Siswa</button>
+                            <button onclick="printAllRapor()" class="bg-blue-800 text-white px-4 py-2 rounded-xl text-xs font-bold shadow hover:bg-blue-900 transition">🖨️ Cetak Semua Rapor Kelas</button>
+                        </div>
+                    </div>
+
+                    <!-- RAPOR PREVIEW CARD -->
+                    <div id="raporPreviewCard" class="bg-slate-50 border border-slate-200 rounded-2xl p-6 space-y-6">
+                        <div class="text-center space-y-1 border-b pb-4">
+                            <h4 class="font-bold text-lg uppercase" id="rpSchool">SMP Negeri 1 Talaga Jaya</h4>
+                            <h5 class="font-bold text-sm text-slate-600">RAPOR HASIL BELAJAR PESERTA DIDIK (KURIKULUM MERDEKA)</h5>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4 text-xs text-slate-700">
+                            <div>
+                                <p><b>Nama Peserta Didik:</b> <span id="rpName">-</span></p>
+                                <p><b>NIS / NISN:</b> <span id="rpNis">-</span></p>
+                                <p><b>Kelas:</b> <span id="rpClass">-</span></p>
+                            </div>
+                            <div>
+                                <p><b>Mata Pelajaran:</b> <span id="rpSubject">-</span></p>
+                                <p><b>Semester / TP:</b> <span id="rpPeriod">-</span></p>
+                                <p><b>Fase:</b> <span id="rpPhase">D</span></p>
+                            </div>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-xs text-left border border-slate-200">
+                                <thead class="bg-slate-200 text-slate-700">
+                                    <tr>
+                                        <th class="p-2 border">Capaian / Komponen</th>
+                                        <th class="p-2 border text-center w-20">Nilai Akhir</th>
+                                        <th class="p-2 border text-center w-20">Predikat</th>
+                                        <th class="p-2 border">Deskripsi Capaian Kompetensi</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="rpTableBody"></tbody>
+                            </table>
+                        </div>
+                        <div class="bg-white p-4 rounded-xl border space-y-2">
+                            <h6 class="font-bold text-xs text-slate-800">Catatan / Deskripsi Perkembangan Kompetensi:</h6>
+                            <p id="rpNarration" class="text-xs text-slate-600 leading-relaxed italic">Belum ada narasi deskripsi capaian. Klik 'Generate Narasi Otomatis' untuk menyusun secara instan dari data penilaian.</p>
+                        </div>
+                        <div class="flex justify-between pt-8 text-xs font-semibold text-center">
+                            <div>
+                                <p>Mengetahui,</p>
+                                <p>Kepala Sekolah</p>
+                                <br><br><br>
+                                <p class="underline font-bold" id="rpPrincipal">-</p>
+                                <p>NIP. <span id="rpNipPrincipal">-</span></p>
+                            </div>
+                            <div>
+                                <p>Talaga Jaya, <span id="rpDate">2026</span></p>
+                                <p>Guru Mata Pelajaran</p>
+                                <br><br><br>
+                                <p class="underline font-bold" id="rpTeacher">-</p>
+                                <p>NIP. <span id="rpNipTeacher">-</span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: JURNAL & REFLEKSI (TAHAP 17) -->
+            <div id="view-jurnal-refleksi" class="view-section space-y-6">
+                <div class="flex justify-between items-center flex-wrap gap-4">
+                    <div>
+                        <h3 class="text-2xl font-bold text-slate-800">📝 Jurnal Refleksi & Evaluasi Guru Terintegrasi</h3>
+                        <p class="text-slate-500 text-sm">Dokumentasi pembelajaran, ketercapaian TP, kendala, solusi, dan refleksi mendalam.</p>
+                    </div>
+                    <button onclick="openModalJournal()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition">+ Tambah Jurnal Mengajar</button>
+                </div>
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-4">
+                    <div class="flex justify-between items-center flex-wrap gap-3">
+                        <input type="text" id="searchJournal" placeholder="🔍 Cari materi atau topik jurnal..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderJournals()">
+                        <div class="flex gap-2">
+                            <button onclick="printReport('view-jurnal-refleksi', 'REKAPITULASI JURNAL MENGAJAR')" class="bg-slate-800 text-white px-3.5 py-2 rounded-xl text-xs font-bold hover:bg-slate-700 transition">🖨️ Cetak Jurnal</button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-100/70 border-b text-slate-600">
+                                <tr>
+                                    <th class="p-3">No</th>
+                                    <th class="p-3">Tanggal</th>
+                                    <th class="p-3">Prt</th>
+                                    <th class="p-3">Materi / Topik</th>
+                                    <th class="p-3">Model / Pendekatan</th>
+                                    <th class="p-3 text-center">Kehadiran</th>
+                                    <th class="p-3 text-center">Status</th>
+                                    <th class="p-3 text-center">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="journalTableBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: DOKUMEN & SURAT RESMI (TAHAP 20) -->
+            <div id="view-documents" class="view-section space-y-6">
+                <div class="flex justify-between items-center flex-wrap gap-4 no-print">
+                    <div>
+                        <h3 class="text-2xl font-bold text-slate-800">✉️ Manajemen Surat & Dokumen Resmi</h3>
+                        <p class="text-slate-500 text-sm">Buat, kelola, dan cetak surat resmi (Panggilan Wali, Pemberitahuan, dll) dengan kop surat.</p>
+                    </div>
+                    <button onclick="openModalDocument()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition flex items-center gap-2">+ Buat Surat Baru</button>
+                </div>
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-4 no-print" id="docListContainer">
+                    <div class="flex justify-between items-center flex-wrap gap-3">
+                        <input type="text" id="searchDoc" placeholder="🔍 Cari nomor atau jenis surat..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderDocuments()">
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-100/70 border-b text-slate-600">
+                                <tr>
+                                    <th class="p-3 w-10">No</th>
+                                    <th class="p-3 w-28">Tanggal</th>
+                                    <th class="p-3">Nomor Surat</th>
+                                    <th class="p-3">Jenis (Perihal)</th>
+                                    <th class="p-3">Siswa Terkait</th>
+                                    <th class="p-3 text-center w-36">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="documentTableBody" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- KANVAS CETAK SURAT (Hanya muncul saat tombol Cetak Surat ditekan) -->
+                <div id="printLetterCanvas" class="hidden bg-white p-10 border rounded-none shadow-none mt-0">
+                    <div class="text-center border-b-4 border-double border-black pb-4 mb-6">
+                        <h2 class="text-2xl font-bold uppercase" id="plSchool">NAMA SEKOLAH</h2>
+                        <p class="text-sm font-medium mt-1">Sistem Administrasi Dokumen Resmi Pembelajaran</p>
+                    </div>
+                    <div class="flex justify-between text-sm mb-6">
+                        <div class="space-y-1">
+                            <p>Nomor &nbsp;&nbsp;&nbsp;: <span id="plNumber">...</span></p>
+                            <p>Lampiran : -</p>
+                            <p>Perihal &nbsp;&nbsp;&nbsp;: <b id="plSubject">...</b></p>
+                        </div>
+                        <div>
+                            <p id="plDateStr">..., ...</p>
+                        </div>
+                    </div>
+                    <div class="text-sm mb-6 space-y-1">
+                        <p>Kepada Yth.</p>
+                        <p><b>Orang Tua / Wali dari <span id="plStudentName">...</span></b></p>
+                        <p>di Tempat</p>
+                    </div>
+                    <div class="text-sm text-justify space-y-4 mb-16" id="plContent" style="line-height: 1.6;">
+                        <p>...</p>
+                    </div>
+                    <div class="flex justify-between text-sm text-center mt-12">
+                        <div>
+                            <p>Mengetahui,</p>
+                            <p>Kepala Sekolah</p>
+                            <br><br><br><br>
+                            <p class="underline font-bold" id="plPrincipal">...</p>
+                            <p>NIP. <span id="plNipPrincipal">...</span></p>
+                        </div>
+                        <div>
+                            <p>Guru Mata Pelajaran</p>
+                            <br><br><br><br>
+                            <p class="underline font-bold" id="plTeacher">...</p>
+                            <p>NIP. <span id="plNipTeacher">...</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: REPORTS -->
+            <div id="view-reports" class="view-section space-y-6">
+                <div>
+                    <h3 class="text-2xl font-bold text-slate-800">🖨️ Pusat Laporan & Pencetakan</h3>
+                    <p class="text-slate-500 text-sm">Pusat pencetakan seluruh dokumen administrasi guru berstandar formal A4.</p>
+                </div>
+                
+                <h4 class="font-bold text-slate-700 border-b pb-2">Laporan Rekapitulasi Kelas (Langsung Cetak)</h4>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+                        <div><h4 class="font-bold text-sm mb-1 text-slate-800">📋 Daftar Peserta Didik</h4><p class="text-xs text-slate-500 mb-4">Daftar identitas dan nomor induk siswa.</p></div>
+                        <button onclick="printReport('view-students', 'DAFTAR PESERTA DIDIK')" class="bg-slate-800 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Laporan</button>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+                        <div><h4 class="font-bold text-sm mb-1 text-slate-800">📅 Rekap Kehadiran</h4><p class="text-xs text-slate-500 mb-4">Akumulasi kehadiran H/S/I/A/D.</p></div>
+                        <button onclick="printReport('view-recap-attendance', 'REKAPITULASI KEHADIRAN PESERTA DIDIK')" class="bg-slate-800 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Laporan</button>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+                        <div><h4 class="font-bold text-sm mb-1 text-slate-800">📝 Daftar Nilai Akhir</h4><p class="text-xs text-slate-500 mb-4">Daftar nilai, predikat, dan ketuntasan.</p></div>
+                        <button onclick="printReport('view-scores', 'DAFTAR NILAI DAN KETUNTASAN BELAJAR')" class="bg-slate-800 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Laporan</button>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+                        <div><h4 class="font-bold text-sm mb-1 text-slate-800">📖 Jurnal Mengajar</h4><p class="text-xs text-slate-500 mb-4">Catatan harian dan absensi pertemuan.</p></div>
+                        <button onclick="printReport('view-attendance', 'JURNAL MENGAJAR HARIAN')" class="bg-slate-800 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Laporan</button>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+                        <div><h4 class="font-bold text-sm mb-1 text-slate-800">🏦 Bank Soal & Asesmen</h4><p class="text-xs text-slate-500 mb-4">Daftar soal, kognitif, dan kesulitan.</p></div>
+                        <button onclick="printReport('view-bank-soal', 'BANK SOAL DAN ASESMEN TERINTEGRASI')" class="bg-slate-800 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Laporan</button>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+                        <div><h4 class="font-bold text-sm mb-1 text-slate-800">📚 Rekap Tugas & LKPD</h4><p class="text-xs text-slate-500 mb-4">Daftar tugas, jenis, dan target pengumpulan.</p></div>
+                        <button onclick="printReport('view-assignments', 'REKAPITULASI TUGAS & PENGUMPULAN')" class="bg-slate-800 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Laporan</button>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+                        <div><h4 class="font-bold text-sm mb-1 text-slate-800">🤖 Draf Modul Ajar (AI)</h4><p class="text-xs text-slate-500 mb-4">Cetak draf modul ajar hasil generate AI.</p></div>
+                        <button onclick="printReport('view-generator', 'MODUL AJAR KURIKULUM MERDEKA')" class="bg-slate-800 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Laporan</button>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+                        <div><h4 class="font-bold text-sm mb-1 text-slate-800">📁 Rekap Portofolio</h4><p class="text-xs text-slate-500 mb-4">Jumlah karya dan bukti yang terkumpul.</p></div>
+                        <button onclick="printReport('view-portfolio', 'REKAPITULASI PORTOFOLIO SISWA')" class="bg-slate-800 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Laporan</button>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+                        <div><h4 class="font-bold text-sm mb-1 text-slate-800">📊 Rekap Analisis Ulangan</h4><p class="text-xs text-slate-500 mb-4">Daftar rata-rata dan ketuntasan ulangan.</p></div>
+                        <button onclick="printReport('view-daily-analysis', 'REKAPITULASI ANALISIS ULANGAN HARIAN')" class="bg-slate-800 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Laporan</button>
+                    </div>
+                </div>
+
+                <h4 class="font-bold text-slate-700 border-b pb-2">Dokumen Spesifik (Pilih Siswa / Topik Terlebih Dahulu)</h4>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                    <div class="bg-blue-50/50 p-5 rounded-2xl border border-blue-100 flex flex-col justify-between">
+                        <div><h4 class="font-bold text-sm mb-1 text-blue-900">📄 Rapor Hasil Belajar</h4><p class="text-xs text-blue-700/80 mb-4">Cetak dokumen pencapaian nilai per siswa.</p></div>
+                        <button onclick="switchView('hasbi-rapor')" class="bg-blue-600 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-blue-700 transition">Buka Menu Rapor ➔</button>
+                    </div>
+                    <div class="bg-indigo-50/50 p-5 rounded-2xl border border-indigo-100 flex flex-col justify-between">
+                        <div><h4 class="font-bold text-sm mb-1 text-indigo-900">📈 Laporan Perkembangan</h4><p class="text-xs text-indigo-700/80 mb-4">Cetak catatan perkembangan & tindak lanjut.</p></div>
+                        <button onclick="switchView('communication'); switchCommTab('progress');" class="bg-indigo-600 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-indigo-700 transition">Buka Menu Komunikasi ➔</button>
+                    </div>
+                    <div class="bg-teal-50/50 p-5 rounded-2xl border border-teal-100 flex flex-col justify-between">
+                        <div><h4 class="font-bold text-sm mb-1 text-teal-900">✉️ Surat & Dokumen Resmi</h4><p class="text-xs text-teal-700/80 mb-4">Cetak surat pemanggilan atau pemberitahuan.</p></div>
+                        <button onclick="switchView('documents')" class="bg-teal-600 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-teal-700 transition">Buka Menu Dokumen ➔</button>
+                    </div>
+                    <div class="bg-orange-50/50 p-5 rounded-2xl border border-orange-100 flex flex-col justify-between">
+                        <div><h4 class="font-bold text-sm mb-1 text-orange-900">📊 Analisis Butir Soal</h4><p class="text-xs text-orange-700/80 mb-4">Cetak rincian daya serap butir soal per topik.</p></div>
+                        <button onclick="switchView('daily-analysis')" class="bg-orange-600 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-orange-700 transition">Buka Menu Analisis ➔</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: BACKUP & RESTORE -->
+            <div id="view-backup" class="view-section space-y-6">
+                <div>
+                    <h3 class="text-2xl font-bold text-slate-800">Backup & Restore Data</h3>
+                    <p class="text-slate-500 text-sm">Amankan seluruh data administrasi atau pulihkan dari file cadangan JSON.</p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 text-center space-y-4">
+                        <div class="text-4xl">💾</div>
+                        <h4 class="font-bold text-lg text-slate-800">Backup Data JSON</h4>
+                        <p class="text-xs text-slate-500">Unduh seluruh data aplikasi ke perangkat Anda.</p>
+                        <button onclick="backupJSON()" class="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold w-full shadow hover:bg-blue-700 transition">Unduh Backup Sekarang</button>
+                    </div>
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 text-center space-y-4">
+                        <div class="text-4xl">♻️</div>
+                        <h4 class="font-bold text-lg text-slate-800">Restore Data JSON</h4>
+                        <p class="text-xs text-slate-500">Pulihkan data dari file backup sebelumnya.</p>
+                        <input type="file" id="fileRestore" accept=".json" class="block w-full text-xs border border-slate-200 p-2.5 rounded-xl bg-slate-50">
+                        <button onclick="restoreJSON()" class="bg-red-600 text-white px-6 py-2.5 rounded-xl font-bold w-full shadow hover:bg-red-700 transition">Mulai Proses Restore</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: SETTINGS -->
+            <div id="view-settings" class="view-section space-y-6 pb-10">
+                <div>
+                    <h3 class="text-2xl font-bold text-slate-800">Pengaturan Sistem & Periode</h3>
+                    <p class="text-slate-500 text-sm">Kelola identitas sekolah, guru, bobot nilai, dan tahun pelajaran.</p>
+                </div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4 max-w-2xl">
+                    <h4 class="font-bold border-b pb-2 text-slate-700">Identitas Sekolah & Guru</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Nama Sekolah</label><input type="text" id="setSchool" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm"></div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Mata Pelajaran</label>
+                            <select id="setSubject" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm">
+                                <option value="Pendidikan Agama dan Budi Pekerti">Pendidikan Agama dan Budi Pekerti</option>
+                                <option value="Pendidikan Pancasila">Pendidikan Pancasila</option>
+                                <option value="Bahasa Indonesia">Bahasa Indonesia</option>
+                                <option value="Matematika">Matematika</option>
+                                <option value="Ilmu Pengetahuan Alam (IPA)">Ilmu Pengetahuan Alam (IPA)</option>
+                                <option value="Ilmu Pengetahuan Sosial (IPS)">Ilmu Pengetahuan Sosial (IPS)</option>
+                                <option value="Bahasa Inggris">Bahasa Inggris</option>
+                                <option value="PJOK">Pendidikan Jasmani Olahraga dan Kesehatan (PJOK)</option>
+                                <option value="Informatika">Informatika</option>
+                                <option value="Seni Budaya / Prakarya">Seni Budaya / Prakarya</option>
+                            </select>
+                        </div>
+                        
+                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Tahun Pelajaran</label><input type="text" id="setAcademicYear" placeholder="Contoh: 2026/2027" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm"></div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Semester</label>
+                            <select id="setSemester" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm">
+                                <option value="GANJIL">Ganjil</option>
+                                <option value="GENAP">Genap</option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-span-1 md:col-span-2 border-t pt-3 mt-1"><h5 class="text-sm font-bold text-slate-700">Data Pendidik & Pimpinan</h5></div>
+                        
+                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Nama Guru</label><input type="text" id="setTeacher" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm"></div>
+                        <div><label class="block text-xs font-bold text-slate-700 mb-1">NIP Guru</label><input type="text" id="setNipTeacher" placeholder="Contoh: 19800101..." class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm"></div>
+                        
+                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Kepala Sekolah</label><input type="text" id="setPrincipal" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm"></div>
+                        <div><label class="block text-xs font-bold text-slate-700 mb-1">NIP Kepala Sekolah</label><input type="text" id="setNipPrincipal" placeholder="Contoh: 19700101..." class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm"></div>
+                    </div>
+                    <button onclick="saveSchoolSettings()" class="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow hover:bg-blue-700 transition mt-2">Simpan Pengaturan</button>
+                </div>
+
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4 max-w-3xl mt-6">
+                    <h4 class="font-bold text-slate-800 border-b pb-2">Penilaian &amp; Ketuntasan</h4>
+                    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                        <div><label class="block text-xs font-bold text-slate-700 mb-1">KKTP</label><input type="number" id="setKktp" min="0" max="100" step="0.1" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm"></div>
+                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Bobot Formatif (%)</label><input type="number" id="setWForm" min="0" max="100" step="0.1" oninput="updateWeightTotal()" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm"></div>
+                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Bobot Sumatif (%)</label><input type="number" id="setWSum" min="0" max="100" step="0.1" oninput="updateWeightTotal()" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm"></div>
+                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Bobot UTS (%)</label><input type="number" id="setWUts" min="0" max="100" step="0.1" oninput="updateWeightTotal()" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm"></div>
+                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Bobot UAS (%)</label><input type="number" id="setWUas" min="0" max="100" step="0.1" oninput="updateWeightTotal()" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm"></div>
+                    </div>
+                    <div id="setWeightTotal" class="text-xs font-bold"></div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Jika ada komponen nilai kosong</label>
+                            <select id="setMissingPolicy" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
+                                <option value="incomplete">Nilai akhir tidak dihitung (Belum Lengkap)</option>
+                                <option value="partial">Hitung sementara dari komponen yang ada</option>
+                            </select></div>
+                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Nilai remedial</label>
+                            <select id="setRemedialMode" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
+                                <option value="catat">Hanya dicatat (nilai akhir tidak berubah)</option>
+                                <option value="kktp">Naikkan nilai akhir paling tinggi ke KKTP</option>
+                            </select></div>
+                    </div>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Ambang Kehadiran (%)</label><input type="number" id="setAttMin" min="0" max="100" step="0.1" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm"></div>
+                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Predikat A mulai</label><input type="number" id="setPredA" min="0" max="100" step="0.1" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm"></div>
+                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Predikat B mulai</label><input type="number" id="setPredB" min="0" max="100" step="0.1" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm"></div>
+                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Predikat C mulai</label><input type="number" id="setPredC" min="0" max="100" step="0.1" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm"></div>
+                    </div>
+                    <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="setAttPenalty"> Kurangi nilai akhir bila kehadiran di bawah ambang (proporsional)</label>
+                    <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="setAttRequired"> Kehadiran minimal menjadi syarat tuntas</label>
+                    <div id="gradingErrors" class="hidden text-xs bg-red-50 text-red-700 border border-red-200 rounded-xl p-3"></div>
+                    <button onclick="saveGradingSettings()" class="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow hover:bg-blue-700 transition">Simpan Pengaturan Penilaian</button>
+                </div>
+
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4 max-w-3xl mt-6" id="aiSettingsCard">
+                    <h4 class="font-bold text-slate-800 border-b pb-2">AI (Google Gemini)</h4>
+                    <label class="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" id="setAiEnabled"> Aktifkan fitur AI</label>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Cara terhubung</label>
+                        <select id="setAiMode" onchange="AIUI.onModeChange()" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
+                            <option value="proxy">Lewat proxy Google Apps Script (disarankan, API key aman di server)</option>
+                            <option value="direct">Langsung dengan API key (key tersimpan di browser ini)</option>
+                        </select>
+                    </div>
+                    <div id="aiProxyRow">
+                        <label class="block text-xs font-bold text-slate-700 mb-1">URL Web App Apps Script (berakhiran /exec)</label>
+                        <input type="url" id="setAiProxyUrl" placeholder="https://script.google.com/macros/s/.../exec" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
+                    </div>
+                    <div>
+                        <label id="aiSecretLabel" class="block text-xs font-bold text-slate-700 mb-1"></label>
+                        <input type="password" id="setAiSecret" autocomplete="off" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
+                        <div id="aiDirectWarn" class="hidden text-[11px] text-amber-700 mt-1">Key di browser dapat terbaca siapa pun yang memakai perangkat ini. Pakai key khusus aplikasi ini dan batasi kuotanya di Google AI Studio.</div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 mb-1">Model</label>
+                        <input type="text" id="setAiModel" list="aiModelList" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
+                        <datalist id="aiModelList"><option value="gemini-3.8-flash"><option value="gemini-3.6-flash"><option value="gemini-3.5-flash-lite"><option value="gemini-4-argon"></datalist>
+                        <div class="text-[11px] text-slate-500 mt-1">Cek daftar model dan kuota terbaru di Google AI Studio. Nama model bisa berubah.</div>
+                    </div>
+                    <label class="flex items-start gap-2 text-sm"><input type="checkbox" id="setAiPrivacy" class="mt-1"> <span>Saya mengerti bahwa data yang diminta AI diproses oleh layanan Google Gemini. Nama dan NIS siswa diganti kode sebelum dikirim.</span></label>
+                    <label class="flex items-start gap-2 text-sm text-slate-500"><input type="checkbox" id="setAiAllowNames" class="mt-1"> <span>Izinkan nama siswa ikut terkirim (tidak disarankan).</span></label>
+                    <div id="aiStatusMsg" class="hidden"></div>
+                    <div id="aiUsageInfo" class="text-[11px] text-slate-500"></div>
+                    <div class="flex flex-wrap gap-2">
+                        <button onclick="AIUI.save()" class="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow hover:bg-blue-700 transition">Simpan Pengaturan AI</button>
+                        <button id="aiTestBtn" onclick="AIUI.test()" class="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow hover:bg-emerald-700 transition">Uji Koneksi</button>
+                        <button onclick="AIUI.clearSecret()" class="bg-red-50 text-red-600 border border-red-200 px-5 py-2.5 rounded-xl font-bold text-sm">Hapus Kunci</button>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- MODAL GENERATE PROYEK PROFIL LULUSAN AI -->
+    <div id="modalProyekAI" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
+        <form id="formProyekAI" class="bg-white rounded-2xl p-6 w-full max-w-lg space-y-4 shadow-2xl" onsubmit="processGenerateProyekAI(event)">
+            <h4 class="font-bold text-lg border-b pb-2 text-slate-800 flex items-center gap-2">🪄 Generate Proyek Dimensi Profil AI</h4>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Tema Proyek (Fase D - SMP) *</label>
+                <select id="aiProyekTema" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" required onchange="updateProyekTopics()">
+                    <option value="Gaya Hidup Berkelanjutan">Gaya Hidup Berkelanjutan</option>
+                    <option value="Kearifan Lokal">Kearifan Lokal</option>
+                    <option value="Bhinneka Tunggal Ika">Bhinneka Tunggal Ika</option>
+                    <option value="Bangunlah Jiwa dan Raganya">Bangunlah Jiwa dan Raganya</option>
+                    <option value="Suara Demokrasi">Suara Demokrasi</option>
+                    <option value="Rekayasa dan Teknologi">Rekayasa dan Teknologi</option>
+                    <option value="Kewirausahaan">Kewirausahaan</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Topik Pembelajaran / Isu Kontekstual *</label>
+                <select id="aiProyekTopicSelect" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-2" onchange="checkCustomTopic(this.value)"></select>
+                <input type="text" id="aiProyekTopic" placeholder="Ketik topik spesifik di sini..." class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 hidden">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Target Dimensi Profil Lulusan *</label>
+                <select id="aiProyekDimension" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" required>
+                    <option value="Berakhlak Mulia & Etika Lingkungan">Berakhlak Mulia & Etika Lingkungan</option>
+                    <option value="Berkebinekaan Global & Toleransi">Berkebinekaan Global & Toleransi</option>
+                    <option value="Bergotong Royong & Kolaborasi">Bergotong Royong & Kolaborasi</option>
+                    <option value="Kemandirian & Tanggung Jawab">Kemandirian & Tanggung Jawab</option>
+                    <option value="Bernalar Kritis & Problem Solving">Bernalar Kritis & Problem Solving</option>
+                    <option value="Kreativitas & Inovasi">Kreativitas & Inovasi</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Skala Proyek</label>
+                <select id="aiProyekScale" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none">
+                    <option value="Proyek Kelas (Sederhana)">Proyek Kelas (Sederhana - 2 Minggu)</option>
+                    <option value="Proyek Antar Kelas (Menengah)">Proyek Antar Kelas (Menengah - 1 Bulan)</option>
+                    <option value="Proyek Sekolah (Besar)">Proyek Sekolah (Besar - 1 Semester)</option>
+                </select>
+            </div>
+            <div class="flex justify-end gap-2 pt-4">
+                <button type="button" onclick="document.getElementById('modalProyekAI').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold hover:bg-slate-200 transition">Batal</button>
+                <button type="submit" id="btnGenProyekAI" class="px-5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow hover:bg-indigo-700 transition flex items-center gap-2">✨ Generate Proyek</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- MODAL TAMBAH PESERTA DIDIK -->
+    <div id="modalStudent" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
+        <form id="formStudent" class="bg-white rounded-2xl p-6 w-full max-w-md space-y-4 shadow-2xl" onsubmit="saveStudent(event)">
+            <h4 class="font-bold text-lg border-b pb-2 text-slate-800">Tambah / Edit Peserta Didik</h4>
+            <input type="hidden" id="stId">
+            <div><label class="block text-xs font-bold text-slate-700 mb-1">NISN *</label><input type="text" id="stNis" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm" required></div>
+            <div><label class="block text-xs font-bold text-slate-700 mb-1">Nama Lengkap *</label><input type="text" id="stName" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm" required></div>
+            <div class="grid grid-cols-2 gap-4">
+                <div><label class="block text-xs font-bold text-slate-700 mb-1">L/P *</label><select id="stGender" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm"><option value="L">L</option><option value="P">P</option></select></div>
+                <div><label class="block text-xs font-bold text-slate-700 mb-1">Kelas *</label><input type="text" id="stClass" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm" required value="VII.1"></div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('modalStudent').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold">Batal</button>
+                <button type="submit" class="px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold shadow">Simpan</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- MODAL TAMBAH KELAS -->
+    <div id="modalClass" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
+        <form id="formClass" class="bg-white rounded-2xl p-6 w-full max-w-md space-y-4 shadow-2xl" onsubmit="saveClass(event)">
+            <h4 class="font-bold text-lg border-b pb-2 text-slate-800">Tambah / Edit Kelas</h4>
+            <input type="hidden" id="clsId">
+            <div><label class="block text-xs font-bold text-slate-700 mb-1">Nama Kelas *</label><input type="text" id="clsName" placeholder="Contoh: VII.1" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm" required></div>
+            <div><label class="block text-xs font-bold text-slate-700 mb-1">Tingkat *</label><select id="clsGrade" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm"><option value="VII">VII</option><option value="VIII">VIII</option><option value="IX">IX</option></select></div>
+            <div><label class="block text-xs font-bold text-slate-700 mb-1">Fase *</label><input type="text" id="clsPhase" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm" value="D"></div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('modalClass').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold">Batal</button>
+                <button type="submit" class="px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold shadow">Simpan Kelas</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- MODAL SCHEDULE -->
+    <div id="modalSchedule" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
+        <form id="formSchedule" class="bg-white rounded-2xl p-6 w-full max-w-md space-y-4 shadow-2xl" onsubmit="saveSchedule(event)">
+            <h4 class="font-bold text-lg border-b pb-2 text-slate-800">Tambah Jadwal Mengajar</h4>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Pilih Kelas *</label>
+                <select id="schClass" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm" required></select>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Hari *</label>
+                    <select id="schDay" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm" required>
+                        <option value="Senin">Senin</option><option value="Selasa">Selasa</option><option value="Rabu">Rabu</option><option value="Kamis">Kamis</option><option value="Jumat">Jumat</option><option value="Sabtu">Sabtu</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Jam Ke- *</label>
+                    <input type="text" id="schHour" placeholder="Contoh: 1-2" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm" required>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('modalSchedule').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold">Batal</button>
+                <button type="submit" class="px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold shadow">Simpan Jadwal</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- MODAL JURNAL MENGAJAR -->
+    <div id="modalJournal" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
+        <form id="formJournal" class="bg-white rounded-2xl p-6 w-full max-w-xl space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto" onsubmit="saveJournal(event)">
+            <h4 class="font-bold text-lg border-b pb-2 text-slate-800">Tambah Jurnal & Refleksi Mengajar</h4>
+            <div class="grid grid-cols-2 gap-4">
+                <div><label class="block text-xs font-bold text-slate-700 mb-1">Tanggal *</label><input type="date" id="jourDate" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm" required></div>
+                <div><label class="block text-xs font-bold text-slate-700 mb-1">Pertemuan Ke- *</label><input type="number" id="jourNum" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm" value="1" required></div>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Topik / Materi Pembelajaran *</label>
+                <input type="text" id="jourTopic" placeholder="Contoh: Sistem Pernapasan Manusia" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm" required>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Model Pembelajaran</label>
+                    <select id="jourModel" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm">
+                        <option>Problem Based Learning</option>
+                        <option>Project Based Learning</option>
+                        <option>Discovery Learning</option>
+                        <option>Inquiry Learning</option>
+                        <option>Ceramah & Diskusi</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Status Pembelajaran</label>
+                    <select id="jourStatus" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm">
+                        <option value="Selesai">Selesai</option>
+                        <option value="Berlangsung">Berlangsung</option>
+                        <option value="Perlu Tindak Lanjut">Perlu Tindak Lanjut</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Refleksi Guru (Apa yang berjalan baik / kendala) *</label>
+                <textarea id="jourReflect" rows="3" placeholder="Tuliskan catatan refleksi pengajaran di sini..." class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm" required></textarea>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('modalJournal').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold">Batal</button>
+                <button type="submit" class="px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold shadow">Simpan Jurnal</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- MODAL TUGAS BARU -->
+    <div id="modalAssignment" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
+        <form id="formAssignment" class="bg-white rounded-2xl p-6 w-full max-w-2xl space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto" onsubmit="saveAssignment(event)">
+            <div class="flex justify-between items-center border-b pb-2">
+                <h4 class="font-bold text-lg text-slate-800">Tambah Tugas / LKPD Baru</h4>
+                <button data-ai type="button" onclick="generateAssignmentAI()" id="btnGenAsgAI" class="px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold hover:bg-indigo-200 transition flex items-center gap-1">🪄 Draft via AI</button>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Judul Tugas *</label>
+                    <input type="text" id="asgTitle" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Jenis Tugas *</label>
+                    <select id="asgType" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none">
+                        <option value="Tugas">Tugas</option>
+                        <option value="LKPD">LKPD</option>
+                        <option value="Proyek">Proyek</option>
+                        <option value="Praktikum">Praktikum</option>
+                        <option value="Presentasi">Presentasi</option>
+                        <option value="Laporan">Laporan</option>
+                        <option value="Foto Kegiatan">Foto Kegiatan</option>
+                        <option value="Video">Video</option>
+                        <option value="Audio">Audio</option>
+                        <option value="Dokumen">Dokumen</option>
+                        <option value="Hasil Karya">Hasil Karya (Produk)</option>
+                        <option value="Refleksi Siswa">Refleksi Siswa</option>
+                        <option value="Refleksi Guru">Refleksi Guru</option>
+                        <option value="Bukti Remedial">Bukti Remedial</option>
+                        <option value="Bukti Pengayaan">Bukti Pengayaan</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Tujuan Pembelajaran (TP) *</label>
+                <select id="asgTpSelect" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" required></select>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Instruksi & Langkah Pengerjaan *</label>
+                    <textarea id="asgInstructions" rows="4" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" required></textarea>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Rubrik Penilaian (Kriteria & Skor)</label>
+                    <textarea id="asgRubric" rows="4" placeholder="Contoh: Kelengkapan (40%), Analisis (40%), Kerapian (20%)" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none text-slate-600"></textarea>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Batas Waktu (Deadline) *</label>
+                    <input type="date" id="asgDeadline" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Status Publikasi</label>
+                    <select id="asgStatus" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none">
+                        <option value="Aktif">Aktif (Dapat Dikumpulkan)</option>
+                        <option value="Draft">Draft (Disembunyikan)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('modalAssignment').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold hover:bg-slate-200 transition">Batal</button>
+                <button type="submit" class="px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold shadow hover:bg-blue-700 transition">Simpan Tugas</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- MODAL PENGUMPULAN & PENILAIAN TUGAS (BARU) -->
+    <div id="modalSubmissions" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
+        <form id="formSubmissions" class="bg-white rounded-2xl p-6 w-full max-w-4xl space-y-4 shadow-2xl flex flex-col max-h-[90vh]" onsubmit="saveSubmissions(event)">
+            <div class="border-b pb-2 flex justify-between items-center flex-shrink-0">
+                <div>
+                    <h4 class="font-bold text-lg text-slate-800" id="submTitle">Penilaian Tugas</h4>
+                    <p class="text-xs text-slate-500">Catat status pengumpulan, berikan nilai dan feedback kepada peserta didik.</p>
+                </div>
+                <button type="button" onclick="document.getElementById('modalSubmissions').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-2xl font-bold">&times;</button>
+            </div>
+            <input type="hidden" id="currentSubmAsgId">
+            <div class="overflow-y-auto flex-1 border border-slate-200 rounded-xl">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-slate-100/90 border-b text-slate-600 sticky top-0 z-10 backdrop-blur-sm">
+                        <tr>
+                            <th class="p-3 w-10">No</th>
+                            <th class="p-3">Nama Peserta Didik</th>
+                            <th class="p-3 w-40 text-center">Status Kumpul</th>
+                            <th class="p-3 w-24 text-center">Nilai</th>
+                            <th class="p-3">Catatan / Feedback</th>
+                        </tr>
+                    </thead>
+                    <tbody id="submissionsTableBody" class="divide-y divide-slate-100"></tbody>
+                </table>
+            </div>
+            <div class="flex justify-end gap-2 pt-2 border-t flex-shrink-0">
+                <button type="button" onclick="document.getElementById('modalSubmissions').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold hover:bg-slate-200 transition">Batal</button>
+                <button type="submit" class="px-5 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow hover:bg-emerald-700 transition flex items-center gap-2">💾 Simpan Penilaian</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- MODAL TAMBAH WALI -->
+    <div id="modalGuardian" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
+        <form id="formGuardian" class="bg-white rounded-2xl p-6 w-full max-w-md space-y-4 shadow-2xl" onsubmit="saveGuardian(event)">
+            <h4 class="font-bold text-lg border-b pb-2 text-slate-800">Tambah Data Orang Tua / Wali</h4>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Pilih Peserta Didik *</label>
+                <select id="grdStudentId" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" required></select>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Nama Wali *</label>
+                <input type="text" id="grdName" placeholder="Nama Lengkap Wali" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" required>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Hubungan *</label>
+                    <select id="grdRelation" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none">
+                        <option value="Ayah">Ayah</option><option value="Ibu">Ibu</option><option value="Wali">Wali</option><option value="Kakek/Nenek">Kakek/Nenek</option><option value="Saudara">Saudara</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">No. Telp / WhatsApp</label>
+                    <input type="text" id="grdPhone" placeholder="08..." class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none">
+                </div>
+            </div>
+            <div class="flex items-center mt-2">
+                <input type="checkbox" id="grdPrimary" class="mr-2" checked>
+                <label for="grdPrimary" class="text-xs font-bold text-slate-700">Tandai sebagai Wali Utama</label>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('modalGuardian').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold hover:bg-slate-200 transition">Batal</button>
+                <button type="submit" class="px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold shadow hover:bg-blue-700 transition">Simpan Wali</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- MODAL KOMUNIKASI -->
+    <div id="modalCommunication" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
+        <form id="formCommunication" class="bg-white rounded-2xl p-6 w-full max-w-xl space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto" onsubmit="saveCommunication(event)">
+            <h4 class="font-bold text-lg border-b pb-2 text-slate-800">Catat Riwayat Komunikasi</h4>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Peserta Didik *</label>
+                    <select id="comStudentId" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" required onchange="updateCommGuardianOptions(this.value)"></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Wali Terkait *</label>
+                    <select id="comGuardianId" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" required></select>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Tanggal *</label>
+                    <input type="date" id="comDate" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Jenis *</label>
+                    <select id="comType" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" required>
+                        <option value="WhatsApp / Pesan">WhatsApp / Pesan</option><option value="Telepon">Telepon</option><option value="Tatap Muka">Tatap Muka</option><option value="Kunjungan Rumah">Kunjungan Rumah</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Topik *</label>
+                    <select id="comTopic" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" required>
+                        <option value="Akademik / Nilai">Akademik / Nilai</option><option value="Kehadiran / Kedisiplinan">Kehadiran / Kedisiplinan</option><option value="Sikap / Perilaku">Sikap / Perilaku</option><option value="Apresiasi / Kemajuan">Apresiasi / Kemajuan</option><option value="Lainnya">Lainnya</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Ringkasan Pembicaraan *</label>
+                <textarea id="comSummary" rows="3" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" required></textarea>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Rencana Tindak Lanjut (Opsional)</label>
+                <input type="text" id="comFollowUp" placeholder="Contoh: Siswa akan diberikan remedial minggu depan" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Status Penyelesaian *</label>
+                <select id="comStatus" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none">
+                    <option value="Selesai">Selesai</option><option value="Dalam Pemantauan">Dalam Pemantauan</option>
+                </select>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('modalCommunication').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold hover:bg-slate-200 transition">Batal</button>
+                <button type="submit" class="px-5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow hover:bg-indigo-700 transition">Simpan Catatan</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- MODAL DOKUMEN RESMI (TAHAP 20) -->
+    <div id="modalDocument" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
+        <form id="formDocument" class="bg-white rounded-2xl p-6 w-full max-w-2xl space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto" onsubmit="saveDocument(event)">
+            <div class="flex justify-between items-center border-b pb-2">
+                <h4 class="font-bold text-lg text-slate-800 flex items-center gap-2">✉️ Buat Surat Resmi Baru</h4>
+                <button data-ai type="button" onclick="generateDocAI()" class="px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold hover:bg-indigo-200 transition flex items-center gap-1">🪄 Tulis Otomatis via AI</button>
+            </div>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Nomor Surat *</label>
+                    <input type="text" id="docNumber" placeholder="Contoh: 421/01/SMP/2026" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Jenis Surat (Perihal) *</label>
+                    <select id="docType" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" required>
+                        <option value="Pemanggilan Orang Tua / Wali">Pemanggilan Orang Tua / Wali</option>
+                        <option value="Pemberitahuan Kegiatan Akademik">Pemberitahuan Kegiatan Akademik</option>
+                        <option value="Peringatan Keterlambatan Tugas">Peringatan Keterlambatan Tugas</option>
+                        <option value="Apresiasi Prestasi Siswa">Apresiasi Prestasi Siswa</option>
+                        <option value="Keterangan Berkelakuan Baik">Keterangan Berkelakuan Baik</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Peserta Didik Terkait *</label>
+                    <select id="docStudentId" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" required></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Tanggal Surat *</label>
+                    <input type="date" id="docDate" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" required>
+                </div>
+            </div>
+            
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Isi Surat (Paragraf Pembuka, Inti, Penutup) *</label>
+                <textarea id="docContent" rows="7" placeholder="Silakan ketik isi surat atau gunakan tombol 'Tulis Otomatis via AI' di kanan atas..." class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none leading-relaxed" required></textarea>
+            </div>
+            
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('modalDocument').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold hover:bg-slate-200 transition">Batal</button>
+                <button type="submit" class="px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold shadow hover:bg-blue-700 transition">Simpan Surat</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- MODAL BUAT ANALISIS ULANGAN HARIAN -->
+    <div id="modalDailyTest" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
+        <form id="formDailyTest" class="bg-white rounded-2xl p-6 w-full max-w-md space-y-4 shadow-2xl" onsubmit="saveDailyTest(event)">
+            <h4 class="font-bold text-lg border-b pb-2 text-slate-800">Buat Analisis Ulangan Harian</h4>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Topik / Materi Ulangan *</label>
+                <input type="text" id="dtTopic" placeholder="Contoh: Tata Surya (Formatif 1)" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" required>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Tanggal *</label>
+                    <input type="date" id="dtDate" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Jumlah Butir Soal *</label>
+                    <input type="number" id="dtQCount" min="1" max="50" value="10" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none" required>
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Bentuk Soal *</label>
+                <select id="dtType" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none">
+                    <option value="PG">Pilihan Ganda (Auto-Koreksi A-E)</option>
+                    <option value="BS">Benar-Salah (Auto-Koreksi B/S)</option>
+                    <option value="PGK">Pilihan Ganda Kompleks (Input Skor Angka)</option>
+                    <option value="IS">Isian Singkat (Input Skor Angka)</option>
+                    <option value="MJD">Menjodohkan (Input Skor Angka)</option>
+                    <option value="UR">Uraian (Input Skor Angka)</option>
+                </select>
+            </div>
+            <div class="bg-blue-50 text-blue-800 text-xs p-3 rounded-xl border border-blue-100">
+                <b>Tips:</b> Untuk Pilihan Ganda & Benar-Salah, baris tabel teratas adalah <b>Kunci Jawaban</b>. Untuk bentuk soal lainnya (Uraian/PGK), baris teratas adalah <b>Skor Maksimal</b> tiap nomor.
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button type="button" onclick="document.getElementById('modalDailyTest').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold hover:bg-slate-200 transition">Batal</button>
+                <button type="submit" class="px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold shadow hover:bg-blue-700 transition">Simpan & Mulai Input</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- MODAL GENERATE KISI-KISI AI -->
+    <div id="modalKisiKisiAI" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
+        <form id="formKisiKisiAI" class="bg-white rounded-2xl p-6 w-full max-w-lg space-y-4 shadow-2xl" onsubmit="processGenerateKisiKisiAI(event)">
+            <div class="border-b pb-2 flex items-center gap-2">
+                <span class="text-2xl">🪄</span>
+                <div>
+                    <h4 class="font-bold text-lg text-slate-800">Generate Kisi-Kisi & Soal (AI)</h4>
+                    <p class="text-xs text-slate-500">Pilih TP dan sesuaikan IKTP, AI akan merumuskan kisi-kisi beserta butir soalnya secara otomatis.</p>
+                </div>
+            </div>
+            
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Pilih Tujuan Pembelajaran (TP) *</label>
+                <select id="aiKisiTp" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" required onchange="fillIKTPForKisi(this.value)">
+                </select>
+                <p class="text-[10px] text-slate-500 mt-1">IKTP akan otomatis terisi berdasarkan TP yang dipilih.</p>
+            </div>
+            
+            <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">Indikator Ketercapaian (IKTP) Terkait *</label>
+                <textarea id="aiKisiIktp" rows="4" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" required placeholder="Contoh: Peserta didik dapat mengidentifikasi..."></textarea>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-700 mb-1">Jumlah Soal</label>
+                    <input type="number" id="aiKisiCount" min="1" max="15" value="5" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" required>
+                </div>
+            </div>
+            
+            <div class="flex justify-end gap-2 pt-4 border-t">
+                <button type="button" onclick="document.getElementById('modalKisiKisiAI').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold hover:bg-slate-200 transition">Batal</button>
+                <button type="submit" id="btnGenKisiAI" class="px-5 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold shadow hover:bg-purple-700 transition flex items-center gap-2">✨ Susun Kisi-Kisi</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script src="js/core/ids.js"></script>
+    <script src="js/core/sanitize.js"></script>
+    <script src="js/core/store.js"></script>
+    <script src="js/core/integrity.js"></script>
+    <script src="js/domain/grading.js"></script>
+    <script src="js/ai/schema.js"></script>
+    <script src="js/ai/anonymizer.js"></script>
+    <script src="js/ai/prompts.js"></script>
+    <script src="js/ai/aiService.js"></script>
+    <script src="js/ai/tasks.js"></script>
+    <script src="js/ai/fileReader.js"></script>
+    <script src="js/ai/aiUi.js"></script>
+    <script src="js/domain/itemAnalysis.js"></script>
+    <script src="js/app/state.js"></script>
+    <script src="js/app/ui.js"></script>
+    <script src="js/modules/uploads.js"></script>
+    <script src="js/modules/dashboard.js"></script>
+    <script src="js/modules/students.js"></script>
+    <script src="js/modules/classes.js"></script>
+    <script src="js/modules/schedule.js"></script>
+    <script src="js/modules/curriculum.js"></script>
+    <script src="js/modules/p5.js"></script>
+    <script src="js/modules/assignments.js"></script>
+    <script src="js/modules/communication.js"></script>
+    <script src="js/modules/modul-ajar.js"></script>
+    <script src="js/modules/bank-soal.js"></script>
+    <script src="js/modules/attendance.js"></script>
+    <script src="js/modules/scores.js"></script>
+    <script src="js/modules/remedial.js"></script>
+    <script src="js/modules/portfolio.js"></script>
+    <script src="js/modules/rapor.js"></script>
+    <script src="js/modules/journals.js"></script>
+    <script src="js/modules/backup.js"></script>
+    <script src="js/modules/settings.js"></script>
+    <script src="js/modules/documents.js"></script>
+    <script src="js/modules/daily-test.js"></script>
+    <script src="js/app/app.js"></script>
+    <script src="js/app/boot.js"></script>
+</body>
+</html>
