@@ -160,10 +160,11 @@ test('429 dengan retryDelay pendek dihormati', async () => {
     assert.deepEqual(m.sleeps, [7000]);
 });
 
-test('503: ulang sekali; tetap gagal menjadi SERVER', async () => {
-    const m = setup({ responses: [httpErr(503, {}), httpErr(503, {})] });
-    await assert.rejects(AIService.generate({ prompt: 'x' }), e => e.code === 'SERVER' && /503/.test(e.message));
-    assert.equal(m.calls.length, 2);
+test('503: ulang dua kali (2 dtk, 5 dtk); tetap gagal menjadi SERVER dengan pesan asli Gemini', async () => {
+    const m = setup({ responses: [httpErr(503, { message: 'The model is overloaded. Please try again later.' }), httpErr(503, {}), httpErr(503, { message: 'The model is overloaded. Please try again later.' })] });
+    await assert.rejects(AIService.generate({ prompt: 'x' }), e => e.code === 'SERVER' && /503/.test(e.message) && /model is overloaded/.test(e.message) && /Model cadangan/.test(e.message));
+    assert.equal(m.calls.length, 3);
+    assert.deepEqual(m.sleeps, [2000, 5000]);
     const m2 = setup({ responses: [httpErr(500, {}), ok('pulih')] });
     assert.equal((await AIService.generate({ prompt: 'x' })).text, 'pulih');
     assert.equal(m2.calls.length, 2);
@@ -387,4 +388,29 @@ test('ping: prasyarat dicek sebelum jaringan', async () => {
     const m = setup({ cfg: { enabled: false } });
     await assert.rejects(AIService.ping(), e => e.code === 'DISABLED');
     assert.equal(m.calls.length, 0);
+});
+
+test('model cadangan: 503 berulang pada model utama -> pindah sekali ke model cadangan dan berhasil', async () => {
+    const m = setup({ cfg: { model: 'gemini-utama', fallbackModel: 'gemini-cadangan' }, responses: [httpErr(503, {}), httpErr(503, {}), httpErr(503, {}), ok('dari cadangan')] });
+    const r = await AIService.generate({ prompt: 'x' });
+    assert.equal(r.text, 'dari cadangan'); assert.equal(r.fallback, true); assert.equal(r.model, 'gemini-cadangan');
+    assert.ok(m.calls[0].url.includes('gemini-utama')); assert.ok(m.calls[3].url.includes('gemini-cadangan'));
+});
+
+test('model cadangan: tidak dipakai untuk galat non-5xx, dan hanya sekali', async () => {
+    const m = setup({ cfg: { model: 'u', fallbackModel: 'c' }, responses: [httpErr(403, {}), ok('x')] });
+    await assert.rejects(AIService.generate({ prompt: 'x' }), e => e.code === 'AUTH');
+    assert.equal(m.calls.length, 1);
+    const m2 = setup({ cfg: { model: 'u', fallbackModel: 'c' }, responses: Array(6).fill(0).map(() => httpErr(503, {})) });
+    await assert.rejects(AIService.generate({ prompt: 'x' }), e => e.code === 'SERVER');
+    assert.equal(m2.calls.length, 6);                              // 3 pada utama + 3 pada cadangan, lalu berhenti
+    const m3 = setup({ cfg: { model: 'sama', fallbackModel: 'sama' }, responses: [httpErr(503, {}), httpErr(503, {}), httpErr(503, {})] });
+    await assert.rejects(AIService.generate({ prompt: 'x' }), e => e.code === 'SERVER');
+    assert.equal(m3.calls.length, 3);
+});
+
+test('ping melaporkan pemakaian model cadangan', async () => {
+    setup({ cfg: { model: 'u', fallbackModel: 'c' }, responses: [httpErr(503, {}), httpErr(503, {}), httpErr(503, {}), ok('{"ok": true}')] });
+    const r = await AIService.ping();
+    assert.equal(r.fallback, true); assert.equal(r.model, 'c');
 });

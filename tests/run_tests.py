@@ -498,6 +498,24 @@ def run_tahap2(br):
     check('W3e 403: pesan AUTH berbahasa Indonesia, tidak diulang', 'AUTH' in msg and 'tidak valid' in msg and len(log) == 1, (msg, len(log)))
     ctx.close()
 
+    # --- W3f model cadangan saat 503
+    ctx = new_ctx(br)
+    def overloaded(rec):
+        if 'gemini-3.6-flash' in rec['url']: return 200, GEM_OK
+        return 503, {"error": {"code": 503, "status": "UNAVAILABLE", "message": "The model is overloaded. Please try again later."}}
+    page, errs = open_page(ctx, INDEX, t1_seed()); log = mock_ai(ctx, overloaded)
+    ai_form(page, mode='direct', url=''); page.fill('#setAiFallback', 'bukan model'); page.evaluate("AIUI.save()"); m_bad = ai_msg(page)
+    check('W3f1 nama model cadangan yang tidak valid ditolak', 'cadangan' in m_bad, m_bad)
+    page.fill('#setAiFallback', 'gemini-3.6-flash'); page.evaluate("AIUI.save()")
+    check('W3f2 model cadangan tersimpan', page.evaluate("JSON.parse(localStorage.getItem('g_set')).ai.fallbackModel") == 'gemini-3.6-flash')
+    msg = ai_test(page)
+    check('W3f3 model utama 503 berulang: otomatis pindah ke model cadangan dan Uji Koneksi melaporkannya', 'Koneksi berhasil' in msg and 'MODEL CADANGAN' in msg and 'gemini-3.6-flash' in msg, msg)
+    ctx.close()
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed()); mock_ai(ctx, overloaded)
+    ai_form(page, mode='direct', url=''); msg = ai_test(page)
+    check('W3f4 tanpa model cadangan: pesan 503 memuat alasan asli dari Gemini dan saran', 'SERVER' in msg and 'model is overloaded' in msg and 'Model cadangan' in msg, msg)
+    ctx.close()
+
     # --- W4 offline
     ctx = new_ctx(br)
     page, errs = open_page(ctx, INDEX, t1_seed()); mock_ai(ctx, lambda rec: (200, GEM_OK)); ai_form(page, mode='direct', url='')

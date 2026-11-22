@@ -163,7 +163,11 @@ const AIService = (() => {
             const sec = ri ? parseFloat(String(ri.retryDelay)) : null;
             return err('QUOTA', { status, retryAfterMs: sec ? sec * 1000 : null });
         }
-        if (status >= 500) return err('SERVER', { status, message: `${MESSAGES.SERVER} (kode ${status})` });
+        if (status >= 500) {
+            const why = msg ? ` Pesan dari server: "${String(msg).replace(/\s+/g, ' ').slice(0, 200)}".` : '';
+            const tip = status === 503 ? ' Biasanya sementara karena model sedang padat: tunggu sekitar satu menit lalu coba lagi, atau ganti/isi "Model cadangan" di Pengaturan > AI.' : '';
+            return err('SERVER', { status, upstream: msg || '', message: `${MESSAGES.SERVER} (kode ${status}).${why}${tip}` });
+        }
         return err('BAD_REQUEST', { status, message: `Galat tak terduga (kode ${status}). ${msg}` });
     }
 
@@ -228,7 +232,7 @@ const AIService = (() => {
                 if (wait > 30000) { e.message = MESSAGES.QUOTA + ` Coba lagi sekitar ${Math.ceil(wait / 1000)} detik.`; throw e; }
                 n429++; await deps.sleep(wait, o.signal); continue;
             }
-            if ([500, 503, 504].includes(res.status) && n5xx < 1) { n5xx++; await deps.sleep(2000, o.signal); continue; }
+            if ([500, 503, 504].includes(res.status) && n5xx < 2) { await deps.sleep([2000, 5000][n5xx], o.signal); n5xx++; continue; }
             throw e;
         }
     }
@@ -274,20 +278,25 @@ const AIService = (() => {
         const t0 = deps.now();
         const styles = o.schema ? styleOrder(cfg) : ['none'];
         let si = 0, repaired = false, extraTurns = [];
+        let useCfg = cfg, usedFallback = false;
         for (;;) {
             const style = styles[si];
             const body = buildBody(o, style, extraTurns);
             let json;
             try {
-                json = await sendWithRetry(body, cfg, secret, o);
+                json = await sendWithRetry(body, useCfg, secret, o);
             } catch (e) {
                 if (e.code === 'BAD_REQUEST' && e.schemaStyle && si + 1 < styles.length) { si++; continue; }
+                // Layanan/model padat: pindah sekali ke model cadangan bila diatur.
+                if (e.code === 'SERVER' && !usedFallback && cfg.fallbackModel && cfg.fallbackModel !== (cfg.model || DEFAULT_MODEL)) {
+                    usedFallback = true; useCfg = { ...cfg, model: cfg.fallbackModel }; continue;
+                }
                 throw e;
             }
             const tokens = (json.usageMetadata && json.usageMetadata.totalTokenCount) || 0;
             if (tokens) { const u = usageToday(); u.tokens += tokens; deps.usageSet(u); }
             const text = extract(json);
-            const meta = { text, tokens, style, model: cfg.model || DEFAULT_MODEL, ms: deps.now() - t0 };
+            const meta = { text, tokens, style, model: useCfg.model || DEFAULT_MODEL, fallback: usedFallback, ms: deps.now() - t0 };
             if (!o.schema) return meta;
 
             let data, problems;
@@ -357,7 +366,7 @@ const AIService = (() => {
         const schema = { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] };
         try {
             const r = await generate({ task: 'ping', prompt: 'Kembalikan JSON {"ok": true}.', schema, temperature: 0, maxTokens: 256, signal, timeoutMs: deps.pingMs });
-            return { ok: r.data.ok === true, model: r.model, style: r.style, ms: r.ms, tokens: r.tokens, proxyMs };
+            return { ok: r.data.ok === true, model: r.model, fallback: r.fallback, style: r.style, ms: r.ms, tokens: r.tokens, proxyMs };
         } catch (e) {
             if (e.code === 'TIMEOUT') {
                 e.message = proxyMs !== null

@@ -43,6 +43,7 @@ const AIUI = (() => {
         $('setAiProxyUrl').value = c.proxyUrl || '';
         $('setAiModel').value = c.model || AIService.DEFAULT_MODEL;
         $('setAiAllowNames').checked = !!c.allowNames;
+        $('setAiFallback').value = c.fallbackModel || '';
         $('setAiPrivacy').checked = !!c.privacyAckAt;
         const s = $('setAiSecret');
         s.value = '';
@@ -66,7 +67,9 @@ const AIUI = (() => {
         const privacy = $('setAiPrivacy').checked;
 
         const errs = [];
+        const fallback = $('setAiFallback').value.trim();
         if (!MODEL_RE.test(model)) errs.push('Nama model tidak valid (contoh: gemini-3.8-flash).');
+        if (fallback && !MODEL_RE.test(fallback)) errs.push('Nama model cadangan tidak valid (contoh: gemini-3.6-flash).');
         if (mode === 'proxy') {
             let ok = false;
             try { const u = new URL(proxyUrl); ok = u.protocol === 'https:'; } catch (_) {}
@@ -78,8 +81,8 @@ const AIUI = (() => {
         if (errs.length) { msg(errs.join(' '), 'err'); return false; }
 
         if (secretIn) Store.secretSet(secretIn);
-        if (mode !== c.mode || proxyUrl !== c.proxyUrl || model !== c.model || secretIn) { c.styleResolved = null; c.lastTestOk = null; }
-        c.enabled = enabled; c.mode = mode; c.proxyUrl = proxyUrl; c.model = model;
+        if (mode !== c.mode || proxyUrl !== c.proxyUrl || model !== c.model || fallback !== (c.fallbackModel || '') || secretIn) { c.styleResolved = null; c.lastTestOk = null; }
+        c.enabled = enabled; c.mode = mode; c.proxyUrl = proxyUrl; c.model = model; c.fallbackModel = fallback;
         c.allowNames = $('setAiAllowNames').checked;
         if (privacy && !c.privacyAckAt) c.privacyAckAt = new Date().toISOString();
         if (!privacy) c.privacyAckAt = null;
@@ -106,7 +109,7 @@ const AIUI = (() => {
             const r = await AIService.ping(undefined, s => { stage = s; msg(stageText(s), 'info'); });
             cfg().lastTestOk = new Date().toISOString();
             saveAllData();
-            msg(`Koneksi berhasil.${r.proxyMs !== null ? ` Proxy ${r.proxyMs} ms.` : ''} Model ${r.model}, format keluaran terstruktur "${r.style}", Gemini menjawab dalam ${r.ms} ms.`, 'ok');
+            msg(`Koneksi berhasil.${r.proxyMs !== null ? ` Proxy ${r.proxyMs} ms.` : ''} Model ${r.model}${r.fallback ? ' (MODEL CADANGAN, model utama sedang bermasalah)' : ''}, format keluaran terstruktur "${r.style}", Gemini menjawab dalam ${r.ms} ms.`, 'ok');
         } catch (e) {
             const where = (e.stage === 'gemini' || stage === 'gemini') && st.mode === 'proxy' ? ' (tahap 2: Gemini)' : (stage === 'proxy' ? ' (tahap 1: proxy)' : '');
             msg(`Gagal [${e.code || 'ERROR'}]${where}: ${e.message}`, 'err');

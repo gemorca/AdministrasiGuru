@@ -17,7 +17,7 @@
             wUas: 20,
             ...Grading.DEFAULTS,
             ai: {
-                enabled: false, mode: 'proxy', proxyUrl: '', model: 'gemini-3.8-flash',
+                enabled: false, mode: 'proxy', proxyUrl: '', model: 'gemini-3.8-flash', fallbackModel: '',
                 style: 'auto', styleResolved: null, privacyAckAt: null, allowNames: false
             }
         };
