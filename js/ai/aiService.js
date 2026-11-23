@@ -20,7 +20,7 @@ const AIService = (() => {
     const _Prompts = (typeof Prompts !== 'undefined') ? Prompts : require('./prompts.js');
 
     const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
-    const DEFAULT_MODEL = 'gemini-3.8-flash';
+    const DEFAULT_MODEL = 'gemini-3.6-flash';
     const USAGE_KEY = 'g_ai_usage';
 
     class AIError extends Error {
@@ -370,7 +370,7 @@ const AIService = (() => {
         } catch (e) {
             if (e.code === 'TIMEOUT') {
                 e.message = proxyMs !== null
-                    ? `Proxy terhubung (${proxyMs} ms), tetapi Gemini tidak menjawab dalam 60 detik. Kemungkinan: model tidak tersedia atau sangat lambat (coba model lain, mis. gemini-3.6-flash), kuota/penagihan bermasalah, atau eksekusi Apps Script tertahan. Buka tab Executions di Apps Script untuk melihat statusnya.`
+                    ? `Proxy terhubung (${proxyMs} ms), tetapi Gemini tidak menjawab dalam 60 detik. Kemungkinan: model tidak tersedia atau sangat lambat (coba model lain, mis. gemini-3.5-flash-lite), kuota/penagihan bermasalah, atau eksekusi Apps Script tertahan. Buka tab Executions di Apps Script untuk melihat statusnya.`
                     : 'Gemini tidak menjawab dalam 60 detik. Periksa koneksi internet, VPN atau firewall yang memblokir generativelanguage.googleapis.com, dan nama model.';
                 e.stage = 'gemini';
             }

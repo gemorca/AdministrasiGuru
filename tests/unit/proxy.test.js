@@ -138,3 +138,16 @@ test('proxy: op ping membuktikan token tanpa memanggil Gemini dan tanpa memotong
     assert.equal(p.post(good).ok, true);          // batas 1 masih utuh setelah beberapa ping
     assert.deepEqual(makeProxy({ APP_TOKEN: '' }).post({ token: 'x', op: 'ping' }), { proxyError: 'CONFIG' });
 });
+
+test('proxy: testGemini mengukur waktu, memakai TEST_MODEL, dan tidak membocorkan key', () => {
+    const p = makeProxy({ TEST_MODEL: 'gemini-uji' });
+    p.sandbox.testGemini();
+    assert.equal(p.fetched[0].url, 'https://generativelanguage.googleapis.com/v1beta/models/gemini-uji:generateContent');
+    assert.ok(p.logs.some(l => /Model gemini-uji: HTTP 200 dalam \d+ ms/.test(l)));
+    assert.ok(!p.logs.join('\n').includes('REAL-GEMINI-KEY'));
+    const q = makeProxy();
+    q.sandbox.testGemini();
+    assert.ok(q.fetched[0].url.includes('gemini-3.6-flash'));
+    const n = makeProxy({ GEMINI_API_KEY: '' }); n.sandbox.testGemini();
+    assert.equal(n.fetched.length, 0);
+});

@@ -68,7 +68,7 @@ const AIUI = (() => {
 
         const errs = [];
         const fallback = $('setAiFallback').value.trim();
-        if (!MODEL_RE.test(model)) errs.push('Nama model tidak valid (contoh: gemini-3.8-flash).');
+        if (!MODEL_RE.test(model)) errs.push('Nama model tidak valid (contoh: gemini-3.6-flash).');
         if (fallback && !MODEL_RE.test(fallback)) errs.push('Nama model cadangan tidak valid (contoh: gemini-3.6-flash).');
         if (mode === 'proxy') {
             let ok = false;

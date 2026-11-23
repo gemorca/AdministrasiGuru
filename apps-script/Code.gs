@@ -103,3 +103,26 @@ function setupCheck() {
   });
   Logger.log('Uji key ke Gemini: HTTP ' + r.getResponseCode() + (r.getResponseCode() === 200 ? ' (key valid)' : ' (periksa key dan ketersediaan layanan)'));
 }
+
+/**
+ * Tes langsung ke Gemini dari editor Apps Script, tanpa aplikasi. Mengukur berapa lama Gemini menjawab.
+ * Model diambil dari Script property TEST_MODEL (bawaan gemini-3.6-flash). Ganti TEST_MODEL untuk
+ * membandingkan model. Lihat hasil di Execution log. Bila eksekusi menggantung lebih dari 1-2 menit,
+ * masalahnya ada di sisi Gemini/key/proyek, bukan di aplikasi guru.
+ */
+function testGemini() {
+  var props = PropertiesService.getScriptProperties();
+  var key = props.getProperty('GEMINI_API_KEY');
+  var model = props.getProperty('TEST_MODEL') || 'gemini-3.6-flash';
+  if (!key) { Logger.log('GEMINI_API_KEY belum diisi'); return; }
+  var t0 = Date.now();
+  var r = UrlFetchApp.fetch(GEMINI_BASE + model + ':generateContent', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'x-goog-api-key': key },
+    payload: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Balas satu kata: halo' }] }], generationConfig: { maxOutputTokens: 64 } }),
+    muteHttpExceptions: true
+  });
+  Logger.log('Model ' + model + ': HTTP ' + r.getResponseCode() + ' dalam ' + (Date.now() - t0) + ' ms');
+  Logger.log(r.getContentText().slice(0, 300));
+}
