@@ -188,11 +188,33 @@ const AIUI = (() => {
         }
     }
 
+    // ---------- tinjauan draf (pilih butir lalu simpan) ----------
+    let reviewState = null;
+    /** items: array HTML (sudah di-escape pemanggil). onSave(indeksTerpilih[]). */
+    function review({ title, info, items, saveLabel, onSave }) {
+        reviewState = { onSave };
+        $('aiReviewTitle').innerText = title;
+        $('aiReviewInfo').innerText = info || '';
+        $('aiReviewSave').innerText = saveLabel || 'Simpan Terpilih';
+        $('aiReviewList').innerHTML = items.length ? items.map(h => `<label class="block border border-slate-200 rounded-xl p-3 text-sm cursor-pointer"><div class="flex items-start gap-2"><input type="checkbox" checked class="mt-1"><div class="flex-1">${h}</div></div></label>`).join('')
+            : '<div class="text-sm text-slate-500 italic p-4">Tidak ada hasil yang lolos pemeriksaan. Coba lagi.</div>';
+        $('modalAiReview').classList.remove('hidden');
+    }
+    function reviewSave() {
+        if (!reviewState) return;
+        const sel = Array.from(document.querySelectorAll('#aiReviewList input[type=checkbox]')).map((c, i) => c.checked ? i : -1).filter(i => i >= 0);
+        if (!sel.length) { showModal('Peringatan', 'Pilih minimal satu untuk disimpan.', '⚠️'); return; }
+        $('modalAiReview').classList.add('hidden');
+        const cb = reviewState.onSave; reviewState = null;
+        cb(sel);
+    }
+    function reviewCancel() { reviewState = null; $('modalAiReview').classList.add('hidden'); }
+
     function init() {
         AIService.use({
             onStyleResolved: s => { cfg().styleResolved = s; saveAllData(); }
         });
     }
 
-    return { pii, fail, run, render, save, test, clearSecret, onModeChange, ensureReady, acceptPrivacy, applyVisibility, refreshUsage, init, HIDE_WHEN_OFF };
+    return { review, reviewSave, reviewCancel, pii, fail, run, render, save, test, clearSecret, onModeChange, ensureReady, acceptPrivacy, applyVisibility, refreshUsage, init, HIDE_WHEN_OFF };
 })();

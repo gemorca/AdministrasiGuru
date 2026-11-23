@@ -165,3 +165,79 @@ test('modul.build: memuat TP, model, jumlah pertemuan, aturan perkiraan umum, da
     assert.match(t.prompt, /VII\.1/); assert.ok(t.timeoutMs >= 120000); assert.equal(typeof t.validate, 'function');
     assert.deepEqual(t.validate(modul(3)), []);
 });
+
+// ---------- Tahap 4 ----------
+const p5d = { judul: 'Pameran Inovasi Daur Ulang', deskripsi: 'Peserta didik merancang karya daur ulang untuk mengurangi sampah sekolah dan memamerkannya.',
+    tujuan: ['Mengidentifikasi jenis sampah sekolah', 'Membuat karya dari bahan bekas'], tahapan: [{ nama: 'Mengenal masalah', kegiatan: 'Mengamati sampah di sekolah dan mencatatnya.' }, { nama: 'Merancang', kegiatan: 'Membuat sketsa karya dalam kelompok.' }, { nama: 'Membuat', kegiatan: 'Mengerjakan karya dan menguji kekuatannya.' }],
+    produk_akhir: 'Karya daur ulang dan pameran', sub_elemen: ['Menghasilkan gagasan orisinal', 'Bekerja sama'] };
+
+test('p5: skema, build memuat parameter, validasi tautan', () => {
+    assert.deepEqual(Schema.validate(T.p5.schema, p5d), []);
+    const t = T.p5.build({ tema: 'Gaya Hidup Berkelanjutan', topik: 'Sampah', dimensi: 'Kreativitas', skala: '1 Minggu', fase: 'D', kelas: 'VII.1', subject: 'IPA' });
+    for (const x of ['Gaya Hidup Berkelanjutan', 'Sampah', 'Kreativitas', '1 Minggu', 'VII.1']) assert.ok(t.prompt.includes(x), x);
+    assert.deepEqual(T.p5.validate(p5d), []);
+    assert.ok(T.p5.validate({ ...p5d, deskripsi: p5d.deskripsi + ' lihat https://x.com' }).length);
+});
+
+const p5m = {
+    judul: 'Modul Pameran Daur Ulang', latar: 'Sampah sekolah menumpuk sehingga perlu aksi nyata dari peserta didik.', tujuan: ['Memilah sampah', 'Membuat karya'],
+    dimensi: [{ dimensi: 'Kreativitas', sub_elemen: 'Menghasilkan gagasan', indikator: 'Menyampaikan gagasan orisinal.' }],
+    tahapan: [1, 2, 3, 4].map(i => ({ tahap: 'Tahap ' + i, waktu: 'Hari ' + i, kegiatan: 'Guru dan siswa melakukan kegiatan nomor ' + i + ' secara bertahap.', hasil: 'Catatan' })),
+    asesmen: { formatif: ['Observasi kerja kelompok', 'Jurnal harian'], sumatif: ['Penilaian produk akhir'] },
+    rubrik: ['Gagasan', 'Kolaborasi', 'Produk'].map(a => ({ aspek: a, skor1: 'Belum tampak', skor2: 'Mulai tampak', skor3: 'Tampak', skor4: 'Sangat menonjol' })),
+    produk: 'Karya daur ulang dan pameran kelas', kata_kunci: ['daur ulang sampah', 'ecobrick'], refleksi: ['Apa yang kamu pelajari?', 'Apa yang bisa diperbaiki?'] };
+
+test('p5modul: skema, build memakai data proyek tersimpan, tanpa tautan', () => {
+    assert.deepEqual(Schema.validate(T.p5modul.schema, p5m), []);
+    const proyek = { theme: 'T', topic: 'Sampah', title: 'Judul P', description: 'Deskripsi', dimension: 'Kreativitas', scale: '1 Minggu', goals: ['G1', 'G2'], stages: [{ nama: 'A' }, { nama: 'B' }], product: 'Karya X' };
+    const t = T.p5modul.build({ proyek, ctx: { subject: 'IPA', fase: 'D', kelas: 'VII.1' } });
+    assert.match(t.prompt, /G1 \| G2/); assert.match(t.prompt, /A > B/); assert.match(t.prompt, /Karya X/); assert.ok(!/undefined/.test(t.prompt));
+    const bare = T.p5modul.build({ proyek: { topic: 'x', title: 't', description: 'd', dimension: 'k' }, ctx: { subject: 'IPA', fase: 'D', kelas: '-' } });
+    assert.ok(!/Tujuan rancangan|Tahapan rancangan/.test(bare.prompt));
+    assert.ok(T.p5modul.validate({ ...p5m, latar: 'lihat www.contoh.com' }).length);
+});
+
+const asgD = { judul: 'LKPD Klasifikasi Zat', pengantar: 'Lembar ini membimbing kalian mengamati zat di sekitar.', langkah: ['Amati tiga benda', 'Catat sifatnya', 'Kelompokkan benda'], dikumpulkan: 'Lembar kerja yang telah diisi',
+    rubrik: [{ kriteria: 'Data', bobot: 40, skor4: 'Lengkap', skor1: 'Kurang' }, { kriteria: 'Analisis', bobot: 40, skor4: 'Tepat', skor1: 'Keliru' }, { kriteria: 'Kesimpulan', bobot: 20, skor4: 'Jelas', skor1: 'Tidak ada' }] };
+
+test('asg: bobot rubrik wajib tepat 100; toFields menyusun instruksi dan rubrik', () => {
+    assert.deepEqual(Schema.validate(T.asg.schema, asgD), []);
+    assert.deepEqual(T.asg.validate(asgD), []);
+    const bad = { ...asgD, rubrik: asgD.rubrik.map((r, i) => i ? r : { ...r, bobot: 35 }) };
+    assert.ok(T.asg.validate(bad).some(e => /jumlah bobot rubrik 95/.test(e)));
+    const f = T.asg.toFields(asgD, tp);
+    assert.equal(f.title, 'LKPD Klasifikasi Zat');
+    assert.match(f.instructions, /^Tujuan Pembelajaran: Peserta didik mampu menganalisis klasifikasi zat/);
+    assert.match(f.instructions, /1\. Amati tiga benda\n2\. Catat sifatnya/); assert.match(f.instructions, /Yang dikumpulkan: Lembar kerja/);
+    assert.equal(f.rubric.split('\n').length, 3); assert.match(f.rubric, /^1\. Data \(40%\) \| Skor 4: Lengkap \| Skor 1: Kurang/);
+    const t = T.asg.build({ tp, jenis: 'LKPD', ctx: { subject: 'IPA', fase: 'D' } });
+    assert.match(t.prompt, /TEPAT 100/); assert.equal(typeof t.validate, 'function');
+});
+
+const stats = { n: 4, indicative: true, mean: 2.5, reliability: 0.4, items: [
+    { no: 1, p: 0.9, pLabel: 'Mudah', d: 0.1, dLabel: 'Kurang', advice: 'x', distractorNotes: [] },
+    { no: 2, p: 0.2, pLabel: 'Sukar', d: -0.2, dLabel: 'Buruk', advice: 'y', distractorNotes: ['Pengecoh C lebih banyak dipilih kelompok atas'] }] };
+
+test('interp: prompt hanya memuat statistik butir (tanpa nama/jawaban), validasi nomor butir', () => {
+    const t = T.interp.build({ dt: { topic: 'Zat', type: 'PG', qCount: 2 }, tp: null, stats });
+    assert.match(t.prompt, /Butir 2: kesukaran p=0.2 \(Sukar\), daya pembeda D=-0.2 \(Buruk\); catatan pengecoh: Pengecoh C/);
+    assert.match(t.prompt, /indikatif/); assert.match(t.prompt, /Angka sudah dihitung dan BENAR/);
+    const d = { ringkasan: 'Dua butir bermasalah dan perlu direvisi sebelum dipakai lagi.', butir: [{ no: 2, penyebab: 'Kunci mungkin keliru.', saran: 'Periksa ulang kunci.' }], remedial: ['Bimbingan kecil'], pengayaan: ['Soal HOTS tambahan'] };
+    assert.deepEqual(Schema.validate(T.interp.schema, d), []);
+    assert.deepEqual(t.validate(d), []);
+    assert.ok(t.validate({ ...d, butir: [{ no: 5, penyebab: 'xxxxxxxxxxx', saran: 'yyyyyyyyyyy' }] }).some(e => /melebihi/.test(e)));
+});
+
+const fRows = [{ code: '[S01]', passed: false, final: 60, weak: [{ code: 'TP-1.1', description: 'Menganalisis zat' }] }, { code: '[S02]', passed: true, final: 90, weak: [] }];
+test('followup: prompt memakai kode saja; validasi kode, jenis, kelengkapan', () => {
+    const t = T.followup.build({ rows: fRows, kktp: 75, ctx: { subject: 'IPA', fase: 'D' } });
+    assert.match(t.prompt, /\[S01\] \| status: Belum Tuntas \| nilai akhir: 60 \| TP belum tercapai: TP-1\.1 \(Menganalisis zat\)/);
+    assert.match(t.prompt, /\[S02\] \| status: Tuntas/); assert.equal(T.followup.BATCH, 10);
+    const ok = { rekomendasi: [{ kode: '[S01]', jenis: 'Remedial', aktivitas: 'Latihan terbimbing TP-1.1 selama 30 menit.' }, { kode: '[S02]', jenis: 'Pengayaan', aktivitas: 'Studi kasus klasifikasi zat lanjutan.' }] };
+    assert.deepEqual(Schema.validate(T.followup.schema, ok), []);
+    assert.deepEqual(T.followup.validate(ok, fRows), []);
+    assert.ok(T.followup.validate({ rekomendasi: [ok.rekomendasi[0]] }, fRows).some(e => /\[S02\] belum/.test(e)));
+    assert.ok(T.followup.validate({ rekomendasi: [{ ...ok.rekomendasi[0], jenis: 'Pengayaan' }, ok.rekomendasi[1]] }, fRows).some(e => /jenis harus Remedial/.test(e)));
+    assert.ok(T.followup.validate({ rekomendasi: [...ok.rekomendasi, { kode: '[S09]', jenis: 'Remedial', aktivitas: 'xxxxxxxxxxxxxxxx' }] }, fRows).some(e => /tidak ada dalam permintaan/.test(e)));
+    assert.ok(T.followup.validate({ rekomendasi: [...ok.rekomendasi, ok.rekomendasi[0]] }, fRows).some(e => /lebih dari sekali/.test(e)));
+});

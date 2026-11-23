@@ -1,4 +1,4 @@
-# Sistem Administrasi Guru, Tahap 0-3 (Fondasi, Perbaikan Inti, Mesin AI, Perangkat Ajar AI)
+# Sistem Administrasi Guru, Tahap 0-4 (Fondasi, Perbaikan Inti, Mesin AI, Perangkat Ajar dan Pembelajaran AI)
 
 Buka `index.html` langsung di browser (tidak perlu server). Perilaku semua menu sama dengan file asli.
 
@@ -9,8 +9,8 @@ Buka `index.html` langsung di browser (tidak perlu server). Perilaku semua menu 
 - `apps-script/`: `Code.gs` (proxy Gemini) dan `PANDUAN.md` (langkah pasang).
 - `js/app/`: `state.js`, `ui.js`, `app.js` (navigasi, init), `boot.js` (titik masuk).
 - `js/modules/`: satu berkas per menu.
-- `tests/unit/`: 96 uji unit. Jalankan `node --test tests/unit/*.test.js`.
-- `tests/run_tests.py`: 135 uji browser (termasuk menjalankan uji unit). Jalankan `python3 tests/run_tests.py [file_asli.html]`. Butuh `pip install playwright` dan Chromium. Argumen opsional = file asli untuk uji paritas.
+- `tests/unit/`: 101 uji unit. Jalankan `node --test tests/unit/*.test.js`.
+- `tests/run_tests.py`: 155 uji browser (termasuk menjalankan uji unit). Jalankan `python3 tests/run_tests.py [file_asli.html]`. Butuh `pip install playwright` dan Chromium. Argumen opsional = file asli untuk uji paritas.
 - `tools/build_from_original.py`: skrip yang menghasilkan proyek ini dari file asli (untuk jejak audit).
 
 ## Aturan pengembangan
@@ -35,7 +35,7 @@ Buka `index.html` langsung di browser (tidak perlu server). Perilaku semua menu 
 - Data siswa/wali WAJIB dianonimkan dengan `Anonymizer` dan dikirim lewat opsi `pii`. Permintaan yang masih memuat nama/NIS/telepon dikenal ditolak otomatis.
 - Rahasia (API key atau token proxy) hanya di `Store.secretGet/Set/Clear` (kunci `g_ai_secret`). Tidak masuk backup, tidak ditampilkan, tidak masuk log.
 - Hasil AI selalu draf: validasi skema, tampilkan, guru menyimpan.
-- Tersambung ke Gemini (Tahap 3): Analisis CP, Modul Ajar, Generate Soal, Kisi-kisi. MASIH simulasi sampai Tahap 4-5: Proyek P5, Modul P5, Tugas/LKPD, narasi rapor, laporan wali, isi surat. Tombolnya sudah bertanda `data-ai`; ubah `AIUI.HIDE_WHEN_OFF` menjadi `true` setelah semua fitur tersambung (Tahap 5).
+- Tersambung ke Gemini: Analisis CP, Modul Ajar, Generate Soal, Kisi-kisi (Tahap 3); Proyek P5, Modul P5, Tugas/LKPD, tafsiran analisis ulangan, rekomendasi remedial/pengayaan (Tahap 4). MASIH simulasi sampai Tahap 5: narasi rapor, laporan wali, isi surat. Tombolnya sudah bertanda `data-ai`; ubah `AIUI.HIDE_WHEN_OFF` menjadi `true` setelah semua fitur tersambung (Tahap 5).
 - Tidak ada panggilan nyata ke Gemini di uji otomatis (memakai tiruan sesuai dokumentasi). Pembuktian dengan key asli = tombol Uji Koneksi.
 
 ## Perangkat ajar AI (Tahap 3)
@@ -43,3 +43,9 @@ Buka `index.html` langsung di browser (tidak perlu server). Perilaku semua menu 
 - Soal kini menyimpan `key`, `explanation`, `tpId`, `indicator`, `material`, `source`. Kartu soal dan kisi-kisi memakai data itu.
 - Streaming tidak dipakai: proxy Apps Script (UrlFetchApp) mengembalikan jawaban utuh. Modul ajar besar memakai batas waktu 150 detik.
 - Bagian "Kebutuhan Belajar" pada modul adalah perkiraan umum dari AI, diberi penanda agar guru menyesuaikan.
+
+## Pembelajaran AI (Tahap 4)
+- Pola draf -> tinjau -> simpan memakai `AIUI.review({ title, info, items, onSave })` (pilih butir lewat centang). Proyek P5 dan rekomendasi tindak lanjut memakainya.
+- Rekomendasi remedial/pengayaan: siswa dikirim sebagai kode `[S01]`, nama dipulihkan hanya di layar. Siswa yang nilai akhirnya belum lengkap tidak diikutkan. Hasil divalidasi (kode lengkap, jenis sesuai status). Disimpan sebagai tindak lanjut berstatus Direncanakan; duplikat sejenis dilewati.
+- Tafsiran analisis ulangan hanya menerima statistik butir (tanpa nama atau jawaban per siswa). Angka tetap dari `ItemAnalysis`.
+- Rubrik tugas wajib berbobot tepat 100 (divalidasi, dengan satu perbaikan otomatis).

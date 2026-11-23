@@ -52,46 +52,27 @@
             document.getElementById('modalAssignment').classList.remove('hidden');
         }
 
-        function generateAssignmentAI() {
+        async function generateAssignmentAI() {
             let tpId = document.getElementById('asgTpSelect').value;
             let type = document.getElementById('asgType').value;
             let tp = tpList.find(t => t.tpId === tpId);
-            if(!tp) { showModal("Peringatan", "Pilih TP terlebih dahulu.", "⚠️"); return; }
-            
+            if (!tp) { showModal("Peringatan", "Pilih TP terlebih dahulu.", "⚠️"); return; }
+            if (!AIUI.ensureReady()) return;
+
             let btn = document.getElementById('btnGenAsgAI');
-            btn.innerHTML = "⏳ AI Menyusun...";
-            btn.disabled = true;
-
-            setTimeout(() => {
-                document.getElementById('asgTitle').value = `${type}: Analisis ${tp.description.split(' ')[0] || 'Materi'} Berbasis TP ${tp.code}`;
-                
-                let inst = `Tujuan Pembelajaran: ${tp.description}\n\n`;
-                let rubric = "";
-
-                if(type === 'LKPD') {
-                    inst += `Petunjuk Pengerjaan:\n1. Amati fenomena di sekitar terkait materi.\n2. Catat hasil pengamatan pada tabel.\n3. Jawab pertanyaan pemantik berdasarkan data.\n\nPertanyaan Pemantik:\n- Mengapa fenomena tersebut bisa terjadi?\n- Kesimpulan apa yang dapat ditarik?`;
-                    rubric = "1. Kelengkapan Data Pengamatan (40%)\n2. Ketepatan Analisis & Jawaban (40%)\n3. Kesimpulan & Refleksi (20%)";
-                } else if(type === 'Proyek' || type === 'Hasil Karya') {
-                    inst += `Tahapan Proyek:\n1. Tentukan masalah kontekstual.\n2. Rancang solusi berupa prototipe/desain.\n3. Implementasikan solusi dalam waktu 1 minggu.\n4. Presentasikan hasil akhir.\n\nKriteria Keberhasilan: Solusi harus aplikatif dan menyertakan refleksi.`;
-                    rubric = "1. Perencanaan & Desain (20%)\n2. Pelaksanaan & Kolaborasi (30%)\n3. Kualitas Produk Akhir (30%)\n4. Presentasi (20%)";
-                } else if (type === 'Presentasi') {
-                    inst += `Instruksi Presentasi:\n1. Buat salindia (slide) materi sesuai topik.\n2. Pastikan ada pendahuluan, isi, dan kesimpulan.\n3. Waktu presentasi maksimal 10 menit per grup.`;
-                    rubric = "1. Penguasaan Materi (40%)\n2. Keterampilan Komunikasi (30%)\n3. Desain Salindia/Media (20%)\n4. Tanya Jawab (10%)";
-                } else {
-                    inst += `Instruksi:\n1. Kerjakan tugas sesuai pedoman.\n2. Kumpulkan hasil sebelum batas waktu yang ditentukan.`;
-                    rubric = "1. Pemahaman Konsep (50%)\n2. Kerapian & Sistematika (30%)\n3. Ketepatan Waktu (20%)";
-                }
-                
-                document.getElementById('asgInstructions').value = inst;
-                document.getElementById('asgRubric').value = rubric;
-                
+            await AIUI.run(btn, 'AI menyusun', async (signal) => {
+                const pii = AIUI.pii();
+                const t = AITasks.asg.build({ tp, jenis: type, ctx: { subject: settings.subject, fase: settings.fase } });
+                const r = await AIService.generate({ task: 'tugas', ...t, signal, pii });
+                const f = AITasks.asg.toFields(r.data, tp);
+                document.getElementById('asgTitle').value = f.title;
+                document.getElementById('asgInstructions').value = f.instructions;
+                document.getElementById('asgRubric').value = f.rubric;
                 let d = new Date();
                 d.setDate(d.getDate() + 7);
                 document.getElementById('asgDeadline').value = d.toISOString().split('T')[0];
-                
-                btn.innerHTML = "🪄 Draft via AI";
-                btn.disabled = false;
-            }, 1000);
+                showModal("Draf Siap Ditinjau", "AI mengisi judul, instruksi, dan rubrik (total bobot 100%). Periksa dan ubah bila perlu, lalu klik Simpan.", "✅");
+            });
         }
 
         function saveAssignment(e) {

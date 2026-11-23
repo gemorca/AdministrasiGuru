@@ -129,3 +129,61 @@
                 renderAnalysis();
             });
         }
+
+        // ---------- Rekomendasi AI (disetujui guru -> tersimpan ke tindak lanjut) ----------
+        function weakTpsOf(stId, kktp) {
+            let ids = new Set();
+            assessments.forEach(a => {
+                if (!a.tpId) return;
+                let v = scoreOf(stId, a.id);
+                if (v !== null && v < kktp) ids.add(a.tpId);
+            });
+            return Array.from(ids).map(id => tpList.find(t => t.tpId === id)).filter(Boolean);
+        }
+
+        async function recommendFollowUpsAI() {
+            let kktp = Grading.config(settings).kktp;
+            let rows = [], skipped = 0;
+            students.forEach(s => {
+                let r = calcFinalScore(s.id);
+                if (r.final === null || r.status === 'Sementara') { skipped++; return; }
+                rows.push({ id: s.id, final: r.final, passed: r.passed, weak: weakTpsOf(s.id, kktp) });
+            });
+            if (!rows.length) { showModal("Informasi", "Belum ada siswa dengan nilai akhir lengkap. Lengkapi nilai terlebih dahulu.", "ℹ️"); return; }
+            if (!AIUI.ensureReady()) return;
+
+            let btn = document.getElementById('btnRecommendAI');
+            let recs = await AIUI.run(btn, 'AI menyusun rekomendasi', async (signal) => {
+                const pii = AIUI.pii();
+                rows.forEach(r => { r.code = pii.code(r.id); });
+                const ctx = { subject: settings.subject, fase: settings.fase };
+                const out = [];
+                for (let i = 0; i < rows.length; i += AITasks.followup.BATCH) {
+                    const batch = rows.slice(i, i + AITasks.followup.BATCH);
+                    const t = AITasks.followup.build({ rows: batch, kktp, ctx });
+                    const r = await AIService.generate({ task: 'tindaklanjut', ...t, signal, pii });
+                    out.push(...r.data.rekomendasi);
+                }
+                return out;
+            });
+            if (!recs) return;
+
+            let byCode = new Map(rows.map(r => [r.code, r]));
+            let items = recs.map(r => ({ r, row: byCode.get(r.kode), st: students.find(s => s.id === byCode.get(r.kode).id) }));
+            let dup = x => followUps.some(f => f.studentId === x.st.id && f.type === x.r.jenis && f.status === 'Direncanakan');
+            let fresh = items.filter(x => !dup(x));
+            let info = `${recs.length} rekomendasi dibuat.` + (items.length - fresh.length ? ` ${items.length - fresh.length} dilewati karena siswa itu sudah punya tindak lanjut Direncanakan sejenis.` : '') + (skipped ? ` ${skipped} siswa tidak dimasukkan karena nilai akhir belum lengkap.` : '');
+            AIUI.review({
+                title: 'Draf Rekomendasi Tindak Lanjut', info: info + ' Hanya yang dicentang yang disimpan, dengan status Direncanakan.', saveLabel: 'Simpan sebagai Tindak Lanjut',
+                items: fresh.map(x => `<div class="font-bold">${esc(x.st.name)} <span class="text-[11px] font-normal ${x.r.jenis === 'Remedial' ? 'text-red-600' : 'text-emerald-700'}">${esc(x.r.jenis)}</span> <span class="text-[11px] font-normal text-slate-500">nilai ${x.row.final}</span></div><div class="text-xs">${esc(x.r.aktivitas)}</div>`),
+                onSave: sel => {
+                    let today = new Date().toISOString().split('T')[0];
+                    sel.forEach(i => {
+                        let x = fresh[i];
+                        allFollowUps.push({ id: genId('FOL'), periodId: activePeriodId, classId: activeClassId, studentId: x.st.id, type: x.r.jenis, date: today, note: x.r.aktivitas, score: null, status: 'Direncanakan', source: 'ai' });
+                    });
+                    saveAllData(); loadActiveContextData(); renderAnalysis();
+                    showModal("Tersimpan", `${sel.length} tindak lanjut disimpan dengan status Direncanakan. Anda dapat mengubahnya lewat tombol Tindak Lanjut.`, "✅");
+                }
+            });
+        }

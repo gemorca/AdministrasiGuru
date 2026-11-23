@@ -839,6 +839,153 @@ def run_tahap3(br):
     check('X12 nama siswa lolos ke prompt: permintaan dibatalkan sebelum dikirim (nol permintaan)', len(log) == 0, modal_text(page))
     ctx.close()
 
+# ------------------------------------------------------------------ Tahap 4
+P5D = {"judul": "Pameran Inovasi Daur Ulang", "deskripsi": "Peserta didik merancang karya daur ulang untuk mengurangi sampah sekolah dan memamerkannya kepada warga sekolah.",
+       "tujuan": ["Mengidentifikasi jenis sampah sekolah", "Membuat karya dari bahan bekas"],
+       "tahapan": [{"nama": "Mengenal masalah", "kegiatan": "Mengamati sampah di sekolah dan mencatatnya."}, {"nama": "Merancang", "kegiatan": "Membuat sketsa karya dalam kelompok."}, {"nama": "Membuat", "kegiatan": "Mengerjakan karya dan menguji kekuatannya."}],
+       "produk_akhir": "Karya daur ulang dan pameran", "sub_elemen": ["Menghasilkan gagasan orisinal", "Bekerja sama"]}
+
+def p5m_data(P=''):
+    return {"judul": P + "Modul Pameran Daur Ulang", "latar": P + "Sampah sekolah menumpuk sehingga perlu aksi nyata dari peserta didik.", "tujuan": ["Memilah sampah", "Membuat karya"],
+        "dimensi": [{"dimensi": "Kreativitas", "sub_elemen": "Menghasilkan gagasan", "indikator": "Menyampaikan gagasan orisinal."}],
+        "tahapan": [{"tahap": f"Tahap {i}", "waktu": f"Hari {i}", "kegiatan": f"Guru dan siswa melakukan kegiatan nomor {i} secara bertahap.", "hasil": "Catatan"} for i in range(1, 5)],
+        "asesmen": {"formatif": ["Observasi kerja kelompok", "Jurnal harian"], "sumatif": ["Penilaian produk akhir"]},
+        "rubrik": [{"aspek": a, "skor1": "Belum tampak", "skor2": "Mulai tampak", "skor3": "Tampak", "skor4": "Sangat menonjol"} for a in ("Gagasan", "Kolaborasi", "Produk")],
+        "produk": "Karya daur ulang dan pameran kelas", "kata_kunci": ["daur ulang sampah", "ecobrick"], "refleksi": ["Apa yang kamu pelajari?", "Apa yang bisa diperbaiki?"]}
+
+def asg_data(w=(40, 40, 20)):
+    return {"judul": "LKPD Klasifikasi Zat", "pengantar": "Lembar ini membimbing kalian mengamati zat di sekitar.", "langkah": ["Amati tiga benda", "Catat sifatnya", "Kelompokkan benda"], "dikumpulkan": "Lembar kerja yang telah diisi",
+            "rubrik": [{"kriteria": k, "bobot": b, "skor4": "Sangat baik", "skor1": "Kurang"} for k, b in zip(("Data", "Analisis", "Kesimpulan"), w)]}
+
+def seq_handler(builders):
+    st = {'n': 0}
+    def h(rec):
+        b = builders[min(st['n'], len(builders) - 1)]; st['n'] += 1
+        return gem(b(rec) if callable(b) else b)
+    return h
+
+def followup_builder(wrong_first=False):
+    st = {'n': 0}
+    def b(rec):
+        st['n'] += 1; pr = prompt_of(rec); out = []
+        for m in re.finditer(r'^(\[S\d+\]) \| status: (Tuntas|Belum Tuntas)', pr, re.M):
+            jenis = 'Pengayaan' if m.group(2) == 'Tuntas' else 'Remedial'
+            if wrong_first and st['n'] == 1 and not out: jenis = 'Pengayaan' if jenis == 'Remedial' else 'Remedial'
+            out.append({"kode": m.group(1), "jenis": jenis, "aktivitas": f"Aktivitas {jenis.lower()} untuk {m.group(1)} selama 30 menit."})
+        return {"rekomendasi": out}
+    return b
+
+INTERP = {"ringkasan": "Sebagian butir terlalu mudah dan perlu direvisi agar lebih membedakan.", "butir": [{"no": 1, "penyebab": "Pengecoh kurang menarik bagi siswa.", "saran": "Revisi pengecoh agar lebih masuk akal."}],
+          "remedial": ["Bimbingan kelompok kecil pada materi sukar"], "pengayaan": ["Soal HOTS tambahan"]}
+
+def seed_many(n):
+    d = t1_seed()
+    for i in range(5, n + 1):
+        d['g_stu'].append({"id": f"STU-{T0 + i}", "periodId": PER, "classId": "CLS-VII1", "nis": str(1000 + i), "name": f"Murid Nomor{i} Uji", "gender": "L", "class": "VII.1"})
+        for aid in ("ASM-F1", "ASM-S1", "ASM-UTS", "ASM-UAS"):
+            d['g_scr'].append({"id": f"SCR-{i}-{aid}", "periodId": PER, "assessmentId": aid, "studentId": f"STU-{T0 + i}", "score": 85 if i % 2 else 55})
+    return d
+
+def run_tahap4(br):
+    # --- Y1 proyek P5: draf -> tinjau -> simpan
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed()); log = mock_ai(ctx, lambda rec: gem(P5D)); ai_ready(page); goto_view(page, 'Proyek')
+    n0 = page.evaluate("allP5Projects.length")
+    page.evaluate("openModalProyekAI()"); page.select_option('#aiProyekDimension', index=1); page.evaluate("document.getElementById('formProyekAI').requestSubmit()")
+    page.wait_for_function("!document.getElementById('modalAiReview').classList.contains('hidden')", timeout=15000)
+    pr = prompt_of(log[0]); sel = page.evaluate("({tema: aiProyekTema.value, dim: aiProyekDimension.value, scale: aiProyekScale.value})")
+    check('Y1a proyek P5: permintaan memuat tema, dimensi, skala; draf muncul dan NOL tersimpan sebelum disetujui',
+          sel['tema'] in pr and sel['dim'] in pr and sel['scale'] in pr and page.evaluate("allP5Projects.length") == n0, (sel, pr[:200]))
+    page.evaluate("AIUI.reviewCancel()")
+    check('Y1b "Buang Semua" tidak menyimpan apa pun', page.evaluate("allP5Projects.length") == n0)
+    page.evaluate("document.getElementById('formProyekAI').requestSubmit()"); page.wait_for_function("!document.getElementById('modalAiReview').classList.contains('hidden')", timeout=15000)
+    page.evaluate("AIUI.reviewSave()")
+    pj = page.evaluate("JSON.parse(localStorage.getItem('g_p5_proj')).slice(-1)[0]")
+    check('Y1c proyek tersimpan lengkap: judul, tujuan, tahapan, produk, sub-elemen, source=ai, ID UUID',
+          pj['title'] == P5D['judul'] and len(pj['goals']) == 2 and len(pj['stages']) == 3 and pj['product'] and pj['subElements'] and pj['source'] == 'ai' and re.fullmatch(r'PROYEK-[0-9a-f-]{36}', pj['id']), pj)
+    ctx.close()
+
+    # --- Y2 modul P5
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed()); log = mock_ai(ctx, lambda rec: gem(p5m_data())); ai_ready(page); goto_view(page, 'Proyek')
+    pid = page.evaluate("allP5Projects[0].id")
+    page.evaluate("(id)=>document.getElementById('btnGenP5Modul_'+id).click()", pid)
+    page.wait_for_function("!document.getElementById('p5ModuleContainer').classList.contains('hidden')", timeout=15000)
+    txt = page.evaluate("document.getElementById('p5ModuleContent').innerText"); html = page.evaluate("document.getElementById('p5ModuleContent').innerHTML")
+    check('Y2a modul P5: struktur lengkap, identitas dari Pengaturan, catatan AI, tanpa tautan karangan dan tanpa nama tempat tetap',
+          'MODUL PROYEK' in txt and 'SMP Negeri 1 Uji' in txt and 'RUBRIK' in txt and 'Dibuat dengan AI' in txt and 'youtube' not in html.lower() and 'google.com' not in html.lower() and 'Talaga' not in txt, txt[:160])
+    check('Y2b permintaan memuat judul proyek tersimpan dan batas waktu panjang', 'Pameran Batik' in prompt_of(log[0]) and log[0]['body']['generationConfig']['maxOutputTokens'] >= 8000)
+    ctx.close()
+    PL = '<img src=x onerror="window.__xss=1">'
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed()); mock_ai(ctx, lambda rec: gem(p5m_data(PL))); ai_ready(page); goto_view(page, 'Proyek')
+    pid = page.evaluate("allP5Projects[0].id"); page.evaluate("(id)=>document.getElementById('btnGenP5Modul_'+id).click()", pid)
+    page.wait_for_function("!document.getElementById('p5ModuleContainer').classList.contains('hidden')", timeout=15000); page.wait_for_timeout(200)
+    check('Y2c XSS: keluaran AI modul P5 berisi <img onerror> tampil sebagai teks, tidak dieksekusi', page.evaluate("window.__xss === 1") is False and page.evaluate("document.querySelectorAll('#p5ModuleContent img[src=x]').length") == 0)
+    ctx.close()
+
+    # --- Y3 tugas / LKPD
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed()); log = mock_ai(ctx, seq_handler([asg_data((40, 40, 15)), asg_data()])); ai_ready(page); goto_view(page, 'Tugas')
+    page.evaluate("openModalAssignment()"); page.select_option('#asgType', 'LKPD'); page.evaluate("document.getElementById('btnGenAsgAI').click()")
+    wait_modal(page, 'Draf Siap Ditinjau')
+    v = page.evaluate("({t: asgTitle.value, i: asgInstructions.value, r: asgRubric.value, d: asgDeadline.value})")
+    pcts = [int(x) for x in re.findall(r'\((\d+)%\)', v['r'])]
+    check('Y3a bobot rubrik tidak 100 pada percobaan pertama: diperbaiki otomatis; hasil total tepat 100 dan 2 permintaan',
+          len(log) == 2 and sum(pcts) == 100 and 'jumlah bobot rubrik 95' in log[1]['body']['contents'][-1]['parts'][0]['text'], (len(log), pcts))
+    check('Y3b judul, instruksi (tujuan, langkah, hasil), rubrik, dan tenggat terisi', v['t'] == 'LKPD Klasifikasi Zat' and 'Langkah Pengerjaan' in v['i'] and '1. Amati tiga benda' in v['i'] and v['d'], v)
+    ctx.close()
+
+    # --- Y4 interpretasi analisis ulangan
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed()); log = mock_ai(ctx, lambda rec: gem(INTERP)); ai_ready(page); goto_view(page, 'Analisis Ulangan')
+    dtb = page.evaluate("localStorage.getItem('g_dts')")
+    page.evaluate("openDailyTestDetail(allDailyTests[0].id)"); page.evaluate("document.getElementById('btnInterpretItems').click()")
+    page.wait_for_function("document.getElementById('itemInterpBox').innerText.includes('Tafsiran AI')", timeout=15000)
+    pr = prompt_of(log[0]); box = page.evaluate("document.getElementById('itemInterpBox').innerText")
+    check('Y4a tafsiran tampil, memuat butir bermasalah dan strategi remedial/pengayaan', 'Butir 1' in box and 'Strategi remedial' in box and 'Strategi pengayaan' in box and 'Dibuat dengan AI' in box, box[:200])
+    check('Y4b permintaan hanya statistik butir: tanpa nama, NIS, atau jawaban per siswa', 'Butir 1: kesukaran' in pr and not re.search(r'Ahmad|Siti|Budi|Dewi|Fajar|1001|1002', pr) and 'answers' not in json.dumps(log[0]['body']), pr[:300])
+    check('Y4c tafsiran hanya ditampilkan, data ulangan tidak berubah', page.evaluate("localStorage.getItem('g_dts')") == dtb)
+    ctx.close()
+
+    # --- Y5 rekomendasi tindak lanjut
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed()); log = mock_ai(ctx, seq_handler([followup_builder()])); ai_ready(page)
+    goto_view(page, 'Pengaturan'); set_settings_ui(page, attPenalty=False); goto_view(page, 'Remedial')
+    n_fu = page.evaluate("allFollowUps.length"); page.evaluate("document.getElementById('btnRecommendAI').click()")
+    page.wait_for_function("!document.getElementById('modalAiReview').classList.contains('hidden')", timeout=15000)
+    pr = prompt_of(log[0]); items = page.evaluate("[...document.querySelectorAll('#aiReviewList label')].map(l=>l.innerText)")
+    check('Y5a prompt memakai KODE saja (tanpa nama/NIS); siswa dengan nilai belum lengkap tidak diikutkan',
+          '[S02] | status: Belum Tuntas' in pr and 'Siti' not in pr and '1002' not in pr and '[S04]' not in pr, pr[:350])
+    check('Y5b pratinjau menampilkan NAMA asli (dipulihkan lokal), 3 siswa, dan info siswa belum lengkap', len(items) == 3 and 'Siti Aminah' in ' '.join(items) and '1 siswa tidak dimasukkan' in page.evaluate("document.getElementById('aiReviewInfo').innerText"), items)
+    check('Y5c NOL tindak lanjut tersimpan sebelum disetujui', page.evaluate("allFollowUps.length") == n_fu)
+    page.evaluate("AIUI.reviewSave()")
+    fu = page.evaluate("JSON.parse(localStorage.getItem('g_fol'))")
+    check('Y5d disetujui: 3 tindak lanjut tersimpan, status Direncanakan, jenis sesuai status siswa, source=ai',
+          len(fu) == 3 and all(f['status'] == 'Direncanakan' and f['source'] == 'ai' and f['score'] is None for f in fu) and {f['type'] for f in fu} == {'Remedial', 'Pengayaan'}, fu)
+    page.evaluate("document.getElementById('btnRecommendAI').click()"); page.wait_for_function("!document.getElementById('modalAiReview').classList.contains('hidden')", timeout=15000)
+    check('Y5e permintaan ulang: siswa yang sudah punya tindak lanjut sejenis dilewati (tidak dobel)', 'dilewati' in page.evaluate("document.getElementById('aiReviewInfo').innerText") and page.evaluate("document.querySelectorAll('#aiReviewList label').length") == 0)
+    ctx.close()
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed()); log = mock_ai(ctx, seq_handler([followup_builder(wrong_first=True), followup_builder()])); ai_ready(page)
+    goto_view(page, 'Pengaturan'); set_settings_ui(page, attPenalty=False); goto_view(page, 'Remedial'); page.evaluate("document.getElementById('btnRecommendAI').click()")
+    page.wait_for_function("!document.getElementById('modalAiReview').classList.contains('hidden')", timeout=15000)
+    check('Y5f jenis rekomendasi tidak sesuai status siswa: ditolak dan diperbaiki otomatis (2 permintaan)', len(log) == 2 and 'jenis harus' in log[1]['body']['contents'][-1]['parts'][0]['text'], len(log))
+    ctx.close()
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, seed_many(12)); log = mock_ai(ctx, seq_handler([followup_builder()])); ai_ready(page)
+    goto_view(page, 'Pengaturan'); set_settings_ui(page, attPenalty=False); goto_view(page, 'Remedial'); page.evaluate("document.getElementById('btnRecommendAI').click()")
+    page.wait_for_function("!document.getElementById('modalAiReview').classList.contains('hidden')", timeout=20000)
+    sizes = [len(re.findall(r'^\[S\d+\] \| status', prompt_of(r), re.M)) for r in log]
+    check('Y5g 11 siswa berhak (1 belum lengkap) dibagi 10 + 1 per permintaan', sizes == [10, 1] and page.evaluate("document.querySelectorAll('#aiReviewList label').length") == 11, sizes)
+    ctx.close()
+
+    # --- Y6 AI belum siap & privasi di input teks bebas
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed()); log = mock_ai(ctx, lambda rec: gem(INTERP))
+    goto_view(page, 'Remedial'); page.evaluate("recommendFollowUpsAI()"); m1 = modal_text(page)
+    page.evaluate("document.getElementById('customModal').classList.add('hidden')"); goto_view(page, 'Analisis Ulangan'); page.evaluate("openDailyTestDetail(allDailyTests[0].id)")
+    page.evaluate("interpretItemAnalysis(allDailyTests[0].id)")
+    check('Y6a AI belum diatur: rekomendasi dan tafsiran diblokir dengan petunjuk, nol permintaan jaringan', ('AI Belum Siap' in m1 or 'Belum ada siswa' in m1 or 'nilai akhir' in m1) and len(log) == 0, (m1, len(log)))
+    ctx.close()
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed()); log = mock_ai(ctx, lambda rec: gem(P5D)); ai_ready(page); goto_view(page, 'Proyek')
+    page.evaluate("openModalProyekAI()"); page.select_option('#aiProyekTopicSelect', 'Lainnya...'); page.fill('#aiProyekTopic', 'Bantu Siti Aminah NIS 1002 mengelola sampah')
+    page.evaluate("document.getElementById('formProyekAI').requestSubmit()"); page.wait_for_function("!document.getElementById('modalAiReview').classList.contains('hidden')", timeout=15000)
+    pr = prompt_of(log[0])
+    check('Y6b nama dan NIS yang diketik guru di topik bebas diganti kode sebelum dikirim', 'Siti Aminah' not in pr and '1002' not in pr and '[S02]' in pr, pr[:300])
+    ctx.close()
+
 def main():
     with sync_playwright() as p:
         br = p.chromium.launch()
@@ -1066,6 +1213,7 @@ def main():
         run_tahap1(br)
         run_tahap2(br)
         run_tahap3(br)
+        run_tahap4(br)
 
         br.close()
 

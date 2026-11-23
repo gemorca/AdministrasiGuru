@@ -55,54 +55,44 @@
             if(modal) modal.classList.remove('hidden');
         }
 
-        function processGenerateProyekAI(e) {
+        async function processGenerateProyekAI(e) {
             e.preventDefault();
             let tema = document.getElementById('aiProyekTema').value;
             let topicSelect = document.getElementById('aiProyekTopicSelect').value;
             let topic = topicSelect === "Lainnya..." ? document.getElementById('aiProyekTopic').value.trim() : topicSelect;
             let dimension = document.getElementById('aiProyekDimension').value;
             let scale = document.getElementById('aiProyekScale').value;
-            
+            if (!topic) { showModal("Peringatan", "Isi topik proyek terlebih dahulu.", "⚠️"); return; }
+            if (!AIUI.ensureReady()) return;
+
             let btn = document.getElementById('btnGenProyekAI');
-            btn.innerHTML = "⏳ AI Sedang Berpikir...";
-            btn.disabled = true;
-            btn.classList.add('opacity-70');
-
-            setTimeout(() => {
-                // Simulasi AI Generating content
-                let aiTitle = `Aksi Nyata: Satgas ${topic.split(' ')[0] || 'Kreatif'} Sekolah`;
-                let aiDesc = `Peserta didik secara berkelompok merancang dan mengeksekusi kampanye kesadaran serta aksi langsung mengenai ${topic}, mengintegrasikan nilai ${dimension} dalam lingkungan sekolah. Skala: ${scale}.`;
-                
-                if(dimension.includes('Kreativitas')) {
-                    aiTitle = `Pameran Inovasi: Solusi ${topic.split(' ')[0]}`;
-                    aiDesc = `Menciptakan prototipe atau produk daur ulang kreatif yang menyelesaikan masalah terkait ${topic}, meningkatkan kapasitas ${dimension} siswa.`;
-                } else if(dimension.includes('Kritis')) {
-                    aiTitle = `Forum Debat & Analisis: Isu ${topic}`;
-                    aiDesc = `Penelitian lapangan dan presentasi debat memecahkan masalah seputar ${topic}. Melatih kemampuan ${dimension} secara komprehensif.`;
+            let d = await AIUI.run(btn, 'AI merancang proyek', async (signal) => {
+                const pii = AIUI.pii();
+                const cls = classes.find(c => c.classId === activeClassId);
+                const t = AITasks.p5.build({ tema, topik: pii.scrub(topic), dimensi: dimension, skala: scale, fase: settings.fase, kelas: cls ? cls.className : '', subject: settings.subject });
+                const r = await AIService.generate({ task: 'p5', ...t, validate: AITasks.p5.validate, signal, pii });
+                return r.data;
+            });
+            if (!d) return;
+            AIUI.review({
+                title: 'Draf Proyek P5', info: 'Ini draf dari AI. Periksa lalu simpan; tidak ada yang tersimpan sebelum Anda menyetujui.', saveLabel: 'Simpan Proyek',
+                items: [`<div class="font-bold text-indigo-700">${esc(d.judul)}</div>
+                    <div class="text-xs text-slate-500 mb-1">${esc(tema)} · ${esc(topic)} · ${esc(dimension)} · ${esc(scale)}</div>
+                    <div class="mb-1">${esc(d.deskripsi)}</div>
+                    <div class="text-xs"><b>Tujuan:</b><ul class="list-disc pl-5">${d.tujuan.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>
+                    <div class="text-xs"><b>Tahapan:</b><ol class="list-decimal pl-5">${d.tahapan.map(x => `<li><b>${esc(x.nama)}:</b> ${esc(x.kegiatan)}</li>`).join('')}</ol></div>
+                    <div class="text-xs"><b>Produk akhir:</b> ${esc(d.produk_akhir)}</div>`],
+                onSave: () => {
+                    allP5Projects.push({
+                        id: genId('PROYEK'), periodId: activePeriodId, theme: tema, topic, title: d.judul, description: d.deskripsi,
+                        dimension, scale, phase: settings.fase || 'D',
+                        goals: d.tujuan, stages: d.tahapan, product: d.produk_akhir, subElements: d.sub_elemen, source: 'ai'
+                    });
+                    saveAllData(); loadActiveContextData(); renderP5();
+                    document.getElementById('modalProyekAI').classList.add('hidden');
+                    showModal("Tersimpan", "Proyek tersimpan. Klik tombol modul pada daftar untuk menyusun Modul Proyek.", "✅");
                 }
-
-                allP5Projects.push({
-                    id: genId('PROYEK'),
-                    periodId: activePeriodId,
-                    theme: tema,
-                    topic: topic,
-                    title: aiTitle,
-                    description: aiDesc,
-                    dimension: dimension,
-                    scale: scale,
-                    phase: settings.fase || 'D'
-                });
-
-                saveAllData();
-                loadActiveContextData();
-                renderP5();
-                
-                btn.innerHTML = "✨ Generate Proyek";
-                btn.disabled = false;
-                btn.classList.remove('opacity-70');
-                document.getElementById('modalProyekAI').classList.add('hidden');
-                showModal("Sukses AI", "Proyek Dimensi Profil Lulusan berhasil digenerate oleh AI.", "✅");
-            }, 1200);
+            });
         }
 
         function deleteP5(id) {
@@ -115,167 +105,64 @@
             });
         }
         
-        function generateModulP5AI(id) {
+        function renderModulP5(d, p, c) {
+            const thCls = "border border-black p-2 font-bold bg-indigo-50 align-top text-indigo-900";
+            const tdCls = "border border-black p-2 align-top";
+            const tr = (lbl, val) => `<tr><td class="${thCls} w-1/4">${lbl}</td><td class="${tdCls}">${val}</td></tr>`;
+            const h = t => `<h6 class="font-bold text-sm bg-indigo-100 text-indigo-900 p-2 border border-black uppercase mt-4">${t}</h6>`;
+            const nl = t => esc(t).replace(/\n/g, '<br>');
+            const ul = a => '<ul class="list-disc pl-5">' + a.map(x => `<li>${esc(x)}</li>`).join('') + '</ul>';
+            return `
+                <div class="no-print bg-amber-50 border border-amber-200 text-amber-900 text-[11px] rounded-lg p-2 mb-4">Dibuat dengan AI (Gemini): mohon diperiksa dan disesuaikan sebelum dipakai.</div>
+                <div class="text-center mb-6">
+                    <h4 class="font-bold text-lg uppercase text-slate-900">MODUL PROYEK PENGUATAN PROFIL LULUSAN</h4>
+                    <h5 class="font-bold text-md text-slate-700">Tema: ${esc(p.theme || '-')}</h5>
+                    <h5 class="font-bold text-md text-indigo-800">${esc(d.judul)}</h5>
+                </div>
+                ${h('A. IDENTITAS')}
+                <table class="w-full text-xs text-left border-collapse border border-black mb-4"><tbody>
+                    ${tr('Nama Sekolah', ': ' + esc(settings.school))}${tr('Penyusun', ': ' + esc(settings.teacher))}${tr('Fase / Kelas', ': ' + esc(settings.fase) + ' / ' + esc(c.kelas))}
+                    ${tr('Tahun Pelajaran', ': ' + esc(c.period))}${tr('Topik', ': ' + esc(p.topic))}${tr('Alokasi / Skala', ': ' + esc(p.scale || '-'))}
+                </tbody></table>
+                ${h('B. LATAR BELAKANG')}<div class="border border-black p-3 text-xs mb-4">${nl(d.latar)}</div>
+                ${h('C. TUJUAN PROYEK')}<div class="border border-black p-3 text-xs mb-4">${ul(d.tujuan)}</div>
+                ${h('D. DIMENSI, SUB-ELEMEN, DAN INDIKATOR')}
+                <table class="w-full text-xs text-left border-collapse border border-black mb-4"><thead><tr><th class="${thCls}">Dimensi</th><th class="${thCls}">Sub-elemen</th><th class="${thCls}">Indikator</th></tr></thead>
+                <tbody>${d.dimensi.map(x => `<tr><td class="${tdCls}">${esc(x.dimensi)}</td><td class="${tdCls}">${esc(x.sub_elemen)}</td><td class="${tdCls}">${nl(x.indikator)}</td></tr>`).join('')}</tbody></table>
+                ${h('E. TAHAPAN KEGIATAN')}
+                <table class="w-full text-xs text-left border-collapse border border-black mb-4"><thead><tr><th class="${thCls} w-8">No</th><th class="${thCls}">Tahap</th><th class="${thCls} w-24">Waktu</th><th class="${thCls}">Kegiatan</th><th class="${thCls}">Hasil</th></tr></thead>
+                <tbody>${d.tahapan.map((x, i) => `<tr><td class="${tdCls}">${i + 1}</td><td class="${tdCls} font-bold">${esc(x.tahap)}</td><td class="${tdCls}">${esc(x.waktu)}</td><td class="${tdCls}">${nl(x.kegiatan)}</td><td class="${tdCls}">${nl(x.hasil)}</td></tr>`).join('')}</tbody></table>
+                ${h('F. PRODUK AKHIR')}<div class="border border-black p-3 text-xs mb-4">${nl(d.produk)}</div>
+                ${h('G. ASESMEN')}
+                <div class="border border-black p-3 text-xs mb-4"><b>Formatif:</b>${ul(d.asesmen.formatif)}<b class="block mt-2">Sumatif:</b>${ul(d.asesmen.sumatif)}</div>
+                ${h('H. RUBRIK PENILAIAN')}
+                <table class="w-full text-xs text-left border-collapse border border-black mb-4"><thead><tr><th class="${thCls}">Aspek</th><th class="${thCls}">Skor 1</th><th class="${thCls}">Skor 2</th><th class="${thCls}">Skor 3</th><th class="${thCls}">Skor 4</th></tr></thead>
+                <tbody>${d.rubrik.map(r => `<tr><td class="${tdCls} font-bold">${esc(r.aspek)}</td><td class="${tdCls}">${nl(r.skor1)}</td><td class="${tdCls}">${nl(r.skor2)}</td><td class="${tdCls}">${nl(r.skor3)}</td><td class="${tdCls}">${nl(r.skor4)}</td></tr>`).join('')}</tbody></table>
+                ${h('I. REFLEKSI')}<div class="border border-black p-3 text-xs mb-4">${ul(d.refleksi)}</div>
+                ${h('J. KATA KUNCI PENCARIAN SUMBER BELAJAR')}<div class="border border-black p-3 text-xs mb-6">${d.kata_kunci.map(k => `<span class="inline-block bg-slate-100 border border-slate-300 rounded px-2 py-0.5 mr-1 mb-1">${esc(k)}</span>`).join('')}</div>
+                <div class="grid grid-cols-2 gap-8 text-xs text-center mt-8">
+                    <div><p>Mengetahui,</p><p>Kepala Sekolah</p><br><br><br><br><p class="underline font-bold">${esc(settings.principal)}</p><p>NIP. ${esc(settings.nipPrincipal)}</p></div>
+                    <div><p>....................., ....................</p><p>Koordinator Proyek</p><br><br><br><br><p class="underline font-bold">${esc(settings.teacher)}</p><p>NIP. ${esc(settings.nipTeacher)}</p></div>
+                </div>`;
+        }
+
+        async function generateModulP5AI(id) {
             let p = p5List.find(x => x.id === id);
             if (!p) return;
-
+            if (!AIUI.ensureReady()) return;
             let btn = document.getElementById(`btnGenP5Modul_${id}`);
-            let origText = btn.innerHTML;
-            btn.innerHTML = "⏳ Menyusun Modul...";
-            btn.disabled = true;
-
-            setTimeout(() => {
+            await AIUI.run(btn, 'AI menyusun modul', async (signal) => {
+                const pii = AIUI.pii();
+                const cls = classes.find(c => c.classId === activeClassId);
+                const active = periods.find(per => per.id === activePeriodId);
+                const ctx = { subject: settings.subject, fase: settings.fase, kelas: cls ? cls.className : '-' };
+                const t = AITasks.p5modul.build({ proyek: p, ctx });
+                const r = await AIService.generate({ task: 'p5modul', ...t, signal, pii });
+                document.getElementById('p5ModuleContent').innerHTML = renderModulP5(r.data, p, { kelas: ctx.kelas, period: active ? active.year : settings.academicYear });
                 let container = document.getElementById('p5ModuleContainer');
-                let content = document.getElementById('p5ModuleContent');
-                
-                let active = periods.find(per => per.id === activePeriodId);
-                let periodStr = active ? `${active.year}` : settings.academicYear;
-
-                const thCls = "border border-black p-2 font-bold bg-indigo-50 align-top text-indigo-900";
-                const tdCls = "border border-black p-2 align-top";
-                const tr = (lbl, val) => `<tr><td class="${thCls} w-1/4">${lbl}</td><td class="${tdCls}">${val}</td></tr>`;
-
-                let dimText = p.dimension;
-                let subElemen = "Sub-elemen sesuai dengan rubrik dimensi profil pelajar Pancasila yang berlaku (misal: Mengenali dan mengeksplorasi potensi diri, Berkolaborasi, Berpikir kritis).";
-
-                // Generate Simulated Links based on Topic
-                let safeTopic = encodeURIComponent(p.topic);
-                let videoLink = `https://www.youtube.com/results?search_query=${safeTopic}+edukasi+dokumenter`;
-                let articleLink = `https://www.google.com/search?q=artikel+berita+fakta+tentang+${safeTopic}`;
-
-                let html = `
-                    <div class="text-center mb-6">
-                        <h4 class="font-bold text-lg uppercase text-slate-900">MODUL PROYEK PENGUATAN PROFIL PELAJAR PANCASILA</h4>
-                        <h5 class="font-bold text-md text-slate-700">Tema: ${esc(p.theme || 'Tema Proyek Profil')}</h5>
-                    </div>
-                    
-                    <h6 class="font-bold text-sm bg-indigo-100 text-indigo-900 p-2 border border-black uppercase mt-4">A. INFORMASI UMUM PROYEK</h6>
-                    <table class="w-full text-xs text-left border-collapse border border-black mb-4">
-                        <tbody>
-                            ${tr('Nama Sekolah', `: ${esc(settings.school)}`)}
-                            ${tr('Koordinator Proyek', `: ${esc(settings.teacher)}`)}
-                            ${tr('Judul Proyek', `: <b>${esc(p.title)}</b>`)}
-                            ${tr('Topik Spesifik', `: ${esc(p.topic)}`)}
-                            ${tr('Fase / Kelas', `: Fase ${esc(p.phase)} / Kelas Aktif`)}
-                            ${tr('Tahun Pelajaran', `: ${periodStr}`)}
-                            ${tr('Alokasi Waktu', `: ${esc(p.scale)}`)}
-                            ${tr('Fokus Dimensi Profil', `: <b>${esc(p.dimension)}</b>`)}
-                        </tbody>
-                    </table>
-
-                    <h6 class="font-bold text-sm bg-indigo-100 text-indigo-900 p-2 border border-black uppercase mt-4">B. DESKRIPSI SINGKAT PROYEK</h6>
-                    <div class="border border-black p-4 text-xs mb-4 text-justify">
-                        <p>${esc(p.description)}</p>
-                        <p class="mt-2">Melalui proyek ini, peserta didik diajak untuk tidak hanya memahami konsep teoretis dari isu <b>${esc(p.topic)}</b>, melainkan juga mengambil peran aktif. Proyek ini didesain agar siswa secara langsung melatih dimensi <b>${esc(p.dimension)}</b> melalui tahap observasi, perencanaan solusi, hingga aksi nyata (kampanye/pameran/karya).</p>
-                    </div>
-
-                    <h6 class="font-bold text-sm bg-indigo-100 text-indigo-900 p-2 border border-black uppercase mt-4">C. TUJUAN & RUBRIK PENCAPAIAN</h6>
-                    <table class="w-full text-xs text-left border-collapse border border-black mb-4">
-                        <thead class="bg-indigo-50">
-                            <tr>
-                                <th class="${thCls} w-1/4">Dimensi</th>
-                                <th class="${thCls} w-1/4">Elemen & Sub-Elemen</th>
-                                <th class="${thCls}">Target Pencapaian di Akhir Fase</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td class="${tdCls} font-bold">${esc(dimText)}</td>
-                                <td class="${tdCls}">${subElemen}</td>
-                                <td class="${tdCls}">Peserta didik mampu menginisiasi aksi, berkolaborasi dengan beragam pihak, serta menyampaikan argumen rasional dan inovatif terkait pemecahan masalah ${esc(p.topic)}.</td>
-                            </tr>
-                        </tbody>
-                    </table>
-
-                    <h6 class="font-bold text-sm bg-indigo-100 text-indigo-900 p-2 border border-black uppercase mt-4">D. TAHAPAN PELAKSANAAN PROYEK</h6>
-                    <div class="border border-black p-4 text-xs mb-4 space-y-4">
-                        <div>
-                            <h5 class="font-bold text-sm mb-1 text-slate-800">Tahap 1: Pengenalan (Eksplorasi Isu)</h5>
-                            <ul class="list-disc pl-5 space-y-1">
-                                <li>Guru memberikan pemantik berupa penayangan video atau pembacaan artikel mengenai isu ${esc(p.topic)}.<br>
-                                    <span class="text-[11px] text-slate-600 italic block mt-1">Referensi Video: <a href="${videoLink}" target="_blank" class="text-blue-700 underline">${videoLink}</a></span>
-                                    <span class="text-[11px] text-slate-600 italic block">Referensi Artikel: <a href="${articleLink}" target="_blank" class="text-blue-700 underline">${articleLink}</a></span>
-                                </li>
-                                <li>Siswa melakukan curah pendapat (brainstorming) mengidentifikasi masalah utama.</li>
-                                <li>Diskusi kelompok mendalami akar masalah.</li>
-                            </ul>
-                        </div>
-                        <div>
-                            <h5 class="font-bold text-sm mb-1 text-slate-800">Tahap 2: Kontekstualisasi (Observasi Lapangan)</h5>
-                            <ul class="list-disc pl-5">
-                                <li>Siswa turun ke lapangan (lingkungan sekolah/sekitar) untuk melihat fakta riil isu tersebut.</li>
-                                <li>Siswa mengumpulkan data (wawancara, kuesioner, atau pengamatan langsung).</li>
-                                <li>Siswa mempresentasikan temuan awal di depan kelas.</li>
-                            </ul>
-                        </div>
-                        <div>
-                            <h5 class="font-bold text-sm mb-1 text-slate-800">Tahap 3: Aksi Nyata (Pembuatan Karya / Solusi)</h5>
-                            <ul class="list-disc pl-5">
-                                <li>Berdasarkan rumusan solusi, siswa mulai menyusun karya (misal: Poster kampanye, prototipe alat daur ulang, atau persiapan pameran).</li>
-                                <li>Pelaksanaan aksi: Melakukan kampanye atau pameran mini karya di lingkungan sekolah.</li>
-                            </ul>
-                        </div>
-                        <div>
-                            <h5 class="font-bold text-sm mb-1 text-slate-800">Tahap 4: Refleksi dan Tindak Lanjut</h5>
-                            <ul class="list-disc pl-5">
-                                <li>Evaluasi bersama: Apa yang sudah berjalan baik dan apa kendalanya.</li>
-                                <li>Pengisian lembar refleksi diri dan refleksi antar teman.</li>
-                                <li>Penyusunan komitmen bersama untuk mempertahankan perilaku positif setelah proyek selesai.</li>
-                            </ul>
-                        </div>
-                    </div>
-
-                    <h6 class="font-bold text-sm bg-indigo-100 text-indigo-900 p-2 border border-black uppercase mt-4">E. ASESMEN & LEMBAR REFLEKSI</h6>
-                    <div class="border border-black p-4 text-xs mb-4">
-                        <p class="mb-2"><b>1. Asesmen Formatif (Penilaian Proses):</b> Dilakukan selama Tahap 1, 2, dan 3 menggunakan lembar observasi guru (fokus pada kolaborasi dan nalar kritis kelompok).</p>
-                        <p class="mb-2"><b>2. Asesmen Sumatif (Produk & Pameran):</b> Penilaian terhadap kualitas karya akhir dan cara penyampaian (presentasi) saat aksi nyata di Tahap 3.</p>
-                        <p><b>3. Lembar Refleksi Diri (Contoh Pertanyaan):</b><br>
-                        - Bagian mana dari proyek ini yang paling berkesan bagimu?<br>
-                        - Nilai profil pelajar Pancasila apa yang paling berkembang dalam dirimu selama proyek ini?<br>
-                        - Apa yang akan kamu lakukan selanjutnya terkait isu ${esc(p.topic)} ini di kehidupan sehari-hari?</p>
-                    </div>
-
-                    <h6 class="font-bold text-sm bg-indigo-100 text-indigo-900 p-2 border border-black uppercase mt-4">F. LAMPIRAN MEDIA PEMBELAJARAN</h6>
-                    <div class="border border-black p-4 text-xs mb-4">
-                        <p class="mb-3">Untuk mendukung tahap Pengenalan dan Kontekstualisasi, guru dapat menggunakan tautan berikut sebagai bahan diskusi bersama peserta didik atau menyalin tautan ini untuk diberikan kepada siswa:</p>
-                        <ul class="list-disc pl-5 space-y-3">
-                            <li><b>Video Edukasi Interaktif:</b> Penjelasan visual mengenai studi kasus, penyebab, dan dampak dari masalah ${esc(p.topic)}. Membantu mengakomodasi siswa dengan gaya belajar visual-auditori.<br>
-                            🔗 Tautan: <a href="${videoLink}" target="_blank" class="text-blue-700 underline break-all">${videoLink}</a></li>
-                            
-                            <li><b>Artikel Referensi Kritis:</b> Teks bacaan berupa berita atau fakta ilmiah untuk melatih kemampuan literasi dan nalar kritis siswa dalam menemukan akar permasalahan terkait isu ${esc(p.topic)}.<br>
-                            🔗 Tautan: <a href="${articleLink}" target="_blank" class="text-blue-700 underline break-all">${articleLink}</a></li>
-                        </ul>
-                    </div>
-
-                    <div class="flex justify-between text-xs text-center mt-12 px-8">
-                        <div>
-                            <p>Mengetahui,</p>
-                            <p>Kepala Sekolah</p>
-                            <br><br><br><br>
-                            <p class="underline font-bold">${esc(settings.principal)}</p>
-                            <p>NIP. ${esc(settings.nipPrincipal)}</p>
-                        </div>
-                        <div>
-                            <p>Talaga Jaya, ..................... 2026</p>
-                            <p>Koordinator Proyek P5</p>
-                            <br><br><br><br>
-                            <p class="underline font-bold">${esc(settings.teacher)}</p>
-                            <p>NIP. ${esc(settings.nipTeacher)}</p>
-                        </div>
-                    </div>
-                `;
-
-                content.innerHTML = html;
                 container.classList.remove('hidden');
-                
-                setTimeout(() => {
-                    container.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }, 100);
-
-                btn.innerHTML = origText;
-                btn.disabled = false;
-                showModal("Sukses", "Modul Proyek P5 berhasil disusun oleh AI berdasarkan parameter proyek.", "✨");
-            }, 1200);
+                setTimeout(() => container.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+            });
         }
 
         function downloadModulP5Doc() {

@@ -257,7 +257,11 @@
             let colorD = l => (l === 'Sangat baik' || l === 'Baik') ? 'text-emerald-700' : (l === 'Cukup' ? 'text-amber-700' : 'text-red-600');
             box.innerHTML = `
                 <div class="border border-slate-300 rounded-xl overflow-hidden">
-                    <div class="bg-slate-100 px-4 py-2 font-bold text-sm">Analisis Butir Soal</div>
+                    <div class="bg-slate-100 px-4 py-2 font-bold text-sm flex justify-between items-center">
+                        <span>Analisis Butir Soal</span>
+                        <button data-ai id="btnInterpretItems" onclick="interpretItemAnalysis('${dt.id}')" class="no-print px-3 py-1 bg-indigo-100 text-indigo-700 rounded-lg text-[11px] font-bold hover:bg-indigo-200 transition">🪄 Tafsirkan dengan AI</button>
+                    </div>
+                    <div id="itemInterpBox"></div>
                     <div class="px-4 py-2 text-[11px] text-slate-500">${notes.map(esc).join(' ')}</div>
                     <div class="overflow-x-auto">
                     <table class="w-full text-xs text-left border-t">
@@ -413,3 +417,34 @@
             foot.innerHTML = html;
         }
 
+
+        // ---------- Tafsiran AI atas analisis butir (angka tetap dari kode) ----------
+        async function interpretItemAnalysis(testId) {
+            let dt = dailyTests.find(d => d.id === testId);
+            if (!dt) return;
+            let rows = allDailyScores.filter(s => s.testId === testId && students.find(st => st.id === s.studentId));
+            let input = ItemAnalysis.fromDailyTest(dt, rows);
+            let stats = ItemAnalysis.analyze(input.items, input.students);
+            if (!stats.items.length) { showModal("Peringatan", "Isi kunci/skor maksimal dan jawaban siswa terlebih dahulu.", "⚠️"); return; }
+            if (!AIUI.ensureReady()) return;
+            let btn = document.getElementById('btnInterpretItems');
+            // Hanya statistik butir yang dikirim: tidak ada nama atau jawaban per siswa.
+            let d = await AIUI.run(btn, 'AI menafsirkan', async (signal) => {
+                const pii = AIUI.pii();
+                const tp = dt.tpId ? tpList.find(t => t.tpId === dt.tpId) : null;
+                const t = AITasks.interp.build({ dt, tp, stats });
+                const r = await AIService.generate({ task: 'interpretasi', ...t, signal, pii });
+                return r.data;
+            });
+            if (!d) return;
+            let box = document.getElementById('itemInterpBox');
+            if (!box) return;
+            box.innerHTML = `
+                <div class="m-3 border border-indigo-200 bg-indigo-50/50 rounded-xl p-3 text-xs space-y-2">
+                    <div class="font-bold text-indigo-800">Tafsiran AI <span class="font-normal text-[10px] text-indigo-500">(Dibuat dengan AI, mohon diperiksa. Angka di tabel dihitung aplikasi.)</span></div>
+                    <p>${esc(d.ringkasan)}</p>
+                    ${d.butir.length ? `<div><b>Butir bermasalah:</b><ul class="list-disc pl-5">${d.butir.map(b => `<li><b>Butir ${b.no}:</b> ${esc(b.penyebab)} <i>Saran: ${esc(b.saran)}</i></li>`).join('')}</ul></div>` : ''}
+                    <div><b>Strategi remedial:</b><ul class="list-disc pl-5">${d.remedial.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>
+                    <div><b>Strategi pengayaan:</b><ul class="list-disc pl-5">${d.pengayaan.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>
+                </div>`;
+        }

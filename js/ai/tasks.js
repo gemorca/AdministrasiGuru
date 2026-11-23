@@ -348,7 +348,198 @@ const AITasks = (() => {
         }
     };
 
-    return { cp, soal, modul, LEVELS, LEVEL_LABEL, TYPES, PREFIX, DIFFS, MAX_BATCH, refBlock, oneLine };
+
+    // =====================================================================
+    // AI-5 / AI-6  Proyek P5 dan modul proyek
+    // =====================================================================
+    const p5 = {
+        schema: {
+            type: 'object',
+            required: ['judul', 'deskripsi', 'tujuan', 'tahapan', 'produk_akhir', 'sub_elemen'],
+            properties: {
+                judul: str(8), deskripsi: str(40),
+                tujuan: { type: 'array', minItems: 2, maxItems: 5, items: str(10) },
+                tahapan: { type: 'array', minItems: 3, maxItems: 6, items: { type: 'object', required: ['nama', 'kegiatan'], properties: { nama: str(3), kegiatan: str(15) } } },
+                produk_akhir: str(8),
+                sub_elemen: { type: 'array', minItems: 2, maxItems: 4, items: str(5) }
+            }
+        },
+        build({ tema, topik, dimensi, skala, fase, kelas, subject }) {
+            const prompt = [
+                'Rancang satu Proyek Penguatan Profil Lulusan (P5) yang konkret dan dapat dilaksanakan di sekolah.',
+                `Tema: ${tema}`, `Topik: ${topik}`, `Dimensi yang diperkuat: ${dimensi}`, `Skala/durasi proyek: ${skala}`,
+                `Fase: ${fase || 'D'}. Kelas: ${kelas || '-'}. Mata pelajaran penggerak: ${subject || '-'}.`,
+                'Aturan:',
+                '- "judul" menarik dan spesifik pada topik (bukan judul generik).',
+                '- "deskripsi" 2-4 kalimat: masalah yang diangkat, aksi peserta didik, dan kaitannya dengan dimensi.',
+                '- "tujuan" memuat 2-5 tujuan terukur. "tahapan" berurutan (3-6) sesuai durasi, tiap tahap berisi kegiatan nyata.',
+                '- "produk_akhir" = bentuk karya atau aksi yang dihasilkan. "sub_elemen" = sub-elemen dimensi yang dilatih.',
+                '- Jangan memuat tautan, nama orang, atau nama tempat tertentu. Bahasa Indonesia baku.'
+            ].join('\n');
+            return { prompt, schema: p5.schema, temperature: 0.7, maxTokens: 4000, system: 'Anda perancang proyek pembelajaran berbasis proyek untuk SMP di Indonesia.' };
+        },
+        validate(d) { return /https?:\/\/|www\./i.test(JSON.stringify(d)) ? ['hasil tidak boleh memuat tautan'] : []; }
+    };
+
+    const p5modul = {
+        schema: {
+            type: 'object',
+            required: ['judul', 'latar', 'tujuan', 'dimensi', 'tahapan', 'asesmen', 'rubrik', 'produk', 'kata_kunci', 'refleksi'],
+            properties: {
+                judul: str(8), latar: str(40),
+                tujuan: { type: 'array', minItems: 2, maxItems: 6, items: str(10) },
+                dimensi: { type: 'array', minItems: 1, maxItems: 4, items: { type: 'object', required: ['dimensi', 'sub_elemen', 'indikator'], properties: { dimensi: str(3), sub_elemen: str(5), indikator: str(10) } } },
+                tahapan: { type: 'array', minItems: 4, maxItems: 7, items: { type: 'object', required: ['tahap', 'waktu', 'kegiatan', 'hasil'], properties: { tahap: str(3), waktu: str(2), kegiatan: str(20), hasil: str(5) } } },
+                asesmen: { type: 'object', required: ['formatif', 'sumatif'], properties: { formatif: { type: 'array', minItems: 2, maxItems: 5, items: str(10) }, sumatif: { type: 'array', minItems: 1, maxItems: 4, items: str(10) } } },
+                rubrik: { type: 'array', minItems: 3, maxItems: 5, items: { type: 'object', required: ['aspek', 'skor1', 'skor2', 'skor3', 'skor4'], properties: { aspek: str(3), skor1: str(5), skor2: str(5), skor3: str(5), skor4: str(5) } } },
+                produk: str(10),
+                kata_kunci: { type: 'array', minItems: 2, maxItems: 6, items: str(3) },
+                refleksi: { type: 'array', minItems: 2, maxItems: 5, items: str(10) }
+            }
+        },
+        build({ proyek, ctx }) {
+            const prompt = [
+                'Susun MODUL PROYEK P5 lengkap berdasarkan rancangan proyek berikut.',
+                `Mata pelajaran: ${ctx.subject}. Fase: ${ctx.fase}. Kelas: ${ctx.kelas}.`,
+                `Tema: ${proyek.theme || '-'}`, `Topik: ${proyek.topic}`, `Judul proyek: ${oneLine(proyek.title)}`,
+                `Deskripsi: ${oneLine(proyek.description)}`, `Dimensi: ${proyek.dimension}`, `Durasi/skala: ${proyek.scale || '-'}`,
+                Array.isArray(proyek.goals) && proyek.goals.length ? 'Tujuan rancangan: ' + proyek.goals.map(oneLine).join(' | ') : '',
+                Array.isArray(proyek.stages) && proyek.stages.length ? 'Tahapan rancangan: ' + proyek.stages.map(t => oneLine(t.nama)).join(' > ') : '',
+                proyek.product ? 'Produk akhir: ' + oneLine(proyek.product) : '',
+                'Aturan:',
+                '- "tahapan" berurutan dengan alokasi waktu realistis sesuai durasi; kegiatan menyebut tindakan guru dan peserta didik.',
+                '- "rubrik" memuat 3-5 aspek dengan deskriptor skor 1 sampai 4 yang membedakan jelas.',
+                '- "kata_kunci" adalah KATA KUNCI pencarian sumber belajar, bukan tautan. Jangan membuat tautan atau nama orang.',
+                '- Bahasa Indonesia baku.'
+            ].filter(Boolean).join('\n');
+            return { prompt, schema: p5modul.schema, temperature: 0.5, maxTokens: 10000, timeoutMs: 120000, system: 'Anda perancang modul proyek Kurikulum Merdeka yang berpengalaman.', validate: p5modul.validate };
+        },
+        validate(d) { return /https?:\/\/|www\./i.test(JSON.stringify(d)) ? ['hasil tidak boleh memuat tautan'] : []; }
+    };
+
+    // =====================================================================
+    // AI-7  Tugas / LKPD
+    // =====================================================================
+    const asg = {
+        schema: {
+            type: 'object',
+            required: ['judul', 'pengantar', 'langkah', 'dikumpulkan', 'rubrik'],
+            properties: {
+                judul: str(8), pengantar: str(15),
+                langkah: { type: 'array', minItems: 3, maxItems: 8, items: str(10) },
+                dikumpulkan: str(5),
+                rubrik: { type: 'array', minItems: 3, maxItems: 5, items: { type: 'object', required: ['kriteria', 'bobot', 'skor4', 'skor1'],
+                    properties: { kriteria: str(3), bobot: { type: 'integer', minimum: 5, maximum: 60 }, skor4: str(5), skor1: str(5) } } }
+            }
+        },
+        build({ tp, jenis, ctx }) {
+            const prompt = [
+                `Susun ${jenis} untuk peserta didik SMP berdasarkan tujuan pembelajaran berikut.`,
+                `Mata pelajaran: ${ctx.subject}. Fase: ${ctx.fase}.`,
+                `Tujuan Pembelajaran: ${tp.code ? tp.code + ': ' : ''}${oneLine(tp.description)}`,
+                `Indikator: ${oneLine(tp.iktp || tp.description)}`,
+                'Aturan:',
+                '- "langkah" adalah langkah pengerjaan berurutan yang konkret dan dapat dikerjakan siswa.',
+                '- "dikumpulkan" menyebut bentuk hasil yang diserahkan.',
+                '- "rubrik" 3-5 kriteria; "bobot" bilangan bulat (persen) dan JUMLAH SEMUA BOBOT HARUS TEPAT 100.',
+                '- Tanpa tautan dan nama orang. Bahasa Indonesia baku.'
+            ].join('\n');
+            return { prompt, schema: asg.schema, temperature: 0.5, maxTokens: 4000, system: 'Anda perancang tugas dan LKPD yang jelas untuk SMP.', validate: asg.validate };
+        },
+        validate(d) {
+            const p = [];
+            const sum = d.rubrik.reduce((a, r) => a + r.bobot, 0);
+            if (sum !== 100) p.push(`jumlah bobot rubrik ${sum}, harus tepat 100`);
+            if (/https?:\/\/|www\./i.test(JSON.stringify(d))) p.push('hasil tidak boleh memuat tautan');
+            return p;
+        },
+        /** Isi kolom formulir Tugas: instruksi dan rubrik sebagai teks. */
+        toFields(d, tp) {
+            const instructions = `Tujuan Pembelajaran: ${oneLine(tp.description)}\n\n${d.pengantar.trim()}\n\nLangkah Pengerjaan:\n` +
+                d.langkah.map((l, i) => `${i + 1}. ${oneLine(l)}`).join('\n') + `\n\nYang dikumpulkan: ${oneLine(d.dikumpulkan)}`;
+            const rubric = d.rubrik.map((r, i) => `${i + 1}. ${oneLine(r.kriteria)} (${r.bobot}%) | Skor 4: ${oneLine(r.skor4)} | Skor 1: ${oneLine(r.skor1)}`).join('\n');
+            return { title: oneLine(d.judul), instructions, rubric };
+        }
+    };
+
+    // =====================================================================
+    // AI-8  Interpretasi analisis ulangan (angka dihitung kode, AI hanya menafsirkan)
+    // =====================================================================
+    const interp = {
+        schema: {
+            type: 'object',
+            required: ['ringkasan', 'butir', 'remedial', 'pengayaan'],
+            properties: {
+                ringkasan: str(20),
+                butir: { type: 'array', maxItems: 12, items: { type: 'object', required: ['no', 'penyebab', 'saran'], properties: { no: { type: 'integer', minimum: 1 }, penyebab: str(10), saran: str(10) } } },
+                remedial: { type: 'array', minItems: 1, maxItems: 4, items: str(10) },
+                pengayaan: { type: 'array', minItems: 1, maxItems: 3, items: str(10) }
+            }
+        },
+        build({ dt, tp, stats }) {
+            const lines = stats.items.map(it => `Butir ${it.no}: kesukaran p=${it.p} (${it.pLabel}), daya pembeda D=${it.d} (${it.dLabel})` + (it.distractorNotes && it.distractorNotes.length ? `; catatan pengecoh: ${it.distractorNotes.join('; ')}` : '')).join('\n');
+            const prompt = [
+                'Tafsirkan hasil analisis butir soal ulangan harian berikut untuk guru. Angka sudah dihitung dan BENAR; jangan menghitung ulang atau mengubahnya.',
+                `Topik ulangan: ${oneLine(dt.topic)}. Bentuk soal: ${dt.type}. Jumlah butir: ${dt.qCount}. Jumlah peserta: ${stats.n}${stats.indicative ? ' (kurang dari 10, hasil indikatif)' : ''}.`,
+                tp ? `Tujuan pembelajaran terkait: ${oneLine(tp.description)}` : '',
+                stats.mean !== null ? `Rata-rata skor total: ${stats.mean}` : '', stats.reliability !== null ? `Reliabilitas KR-20: ${stats.reliability}` : '',
+                'Data butir:', lines,
+                'Tugas: "ringkasan" 2-4 kalimat. "butir" hanya untuk butir yang BERMASALAH (daya pembeda kurang/buruk, terlalu sukar/mudah, pengecoh tak berfungsi): beri dugaan penyebab dan saran revisi. "remedial" dan "pengayaan" = strategi kelas, bukan nama siswa.',
+                'Tidak ada data siswa pada permintaan ini. Jangan menyebut nama. Bahasa Indonesia baku.'
+            ].filter(Boolean).join('\n');
+            return { prompt, schema: interp.schema, temperature: 0.3, maxTokens: 4000, system: 'Anda konsultan asesmen pendidikan yang teliti dan praktis.', validate: d => interp.validate(d, stats.items.length) };
+        },
+        validate(d, k) {
+            const p = [];
+            d.butir.forEach((b, i) => { if (b.no > k) p.push(`butir[${i}].no ${b.no} melebihi jumlah butir ${k}`); });
+            return p;
+        }
+    };
+
+    // =====================================================================
+    // AI-12  Rekomendasi remedial / pengayaan per siswa (memakai kode anonim)
+    // =====================================================================
+    const followup = {
+        schema: {
+            type: 'object',
+            required: ['rekomendasi'],
+            properties: {
+                rekomendasi: { type: 'array', minItems: 1, maxItems: 12, items: { type: 'object', required: ['kode', 'jenis', 'aktivitas'],
+                    properties: { kode: str(3), jenis: { type: 'string', enum: ['Remedial', 'Pengayaan'] }, aktivitas: str(15) } } }
+            }
+        },
+        BATCH: 10,
+        build({ rows, kktp, ctx }) {
+            const lines = rows.map(r => `${r.code} | status: ${r.passed ? 'Tuntas' : 'Belum Tuntas'} | nilai akhir: ${r.final} | ` +
+                (r.passed ? 'tidak ada TP yang belum tercapai' : 'TP belum tercapai: ' + (r.weak.length ? r.weak.map(t => `${t.code} (${oneLine(t.description).slice(0, 90)})`).join('; ') : 'belum teridentifikasi per TP'))).join('\n');
+            const prompt = [
+                `Beri rekomendasi tindak lanjut pembelajaran ${ctx.subject} (Fase ${ctx.fase}) per siswa. KKTP = ${kktp}.`,
+                'Data siswa (memakai kode, tanpa nama):', lines,
+                'Aturan:',
+                '- Satu rekomendasi untuk SETIAP kode, tepat sekali. Gunakan kode persis seperti diberikan, termasuk tanda kurung siku.',
+                '- Status Belum Tuntas -> jenis "Remedial", aktivitas spesifik pada TP yang belum tercapai (bukan sekadar "belajar lagi"), bentuk, dan perkiraan durasi.',
+                '- Status Tuntas -> jenis "Pengayaan", aktivitas yang memperdalam atau memperluas materi.',
+                '- Tanpa diagnosis psikologis atau medis. Bahasa Indonesia baku.'
+            ].join('\n');
+            return { prompt, schema: followup.schema, temperature: 0.4, maxTokens: 5000, system: 'Anda guru pendamping yang memberi saran tindak lanjut yang realistis.', validate: d => followup.validate(d, rows) };
+        },
+        validate(d, rows) {
+            const p = [];
+            const want = new Map(rows.map(r => [r.code, r.passed ? 'Pengayaan' : 'Remedial']));
+            const seen = new Set();
+            for (const r of d.rekomendasi) {
+                if (!want.has(r.kode)) p.push(`kode ${r.kode} tidak ada dalam permintaan`);
+                else {
+                    if (seen.has(r.kode)) p.push(`kode ${r.kode} muncul lebih dari sekali`);
+                    if (want.get(r.kode) !== r.jenis) p.push(`kode ${r.kode}: jenis harus ${want.get(r.kode)}`);
+                }
+                seen.add(r.kode);
+            }
+            for (const c of want.keys()) if (!seen.has(c)) p.push(`kode ${c} belum diberi rekomendasi`);
+            return p;
+        }
+    };
+    return { cp, soal, modul, p5, p5modul, asg, interp, followup, LEVELS, LEVEL_LABEL, TYPES, PREFIX, DIFFS, MAX_BATCH, refBlock, oneLine };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = AITasks;

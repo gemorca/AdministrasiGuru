@@ -117,6 +117,20 @@
         </div>
     </div>
 
+    <!-- MODAL TINJAUAN DRAF AI (UMUM) -->
+    <div id="modalAiReview" class="fixed inset-0 bg-slate-900/60 z-[60] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-2xl space-y-3 shadow-2xl flex flex-col max-h-[90vh]">
+            <h4 id="aiReviewTitle" class="font-bold text-lg border-b pb-2 text-slate-800"></h4>
+            <p class="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2">Ini draf dari AI. Periksa isinya. Hanya yang dicentang yang disimpan.</p>
+            <div id="aiReviewInfo" class="text-xs text-slate-600"></div>
+            <div id="aiReviewList" class="overflow-y-auto flex-1 space-y-2"></div>
+            <div class="flex justify-end gap-2">
+                <button type="button" onclick="AIUI.reviewCancel()" class="px-5 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">Buang Semua</button>
+                <button type="button" id="aiReviewSave" onclick="AIUI.reviewSave()" class="px-5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold">Simpan Terpilih</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL PRATINJAU DRAF SOAL AI -->
     <div id="modalAiPreview" class="fixed inset-0 bg-slate-900/60 z-[60] hidden flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl p-6 w-full max-w-2xl space-y-3 shadow-2xl flex flex-col max-h-[90vh]">
@@ -1253,6 +1267,7 @@
                         <h3 class="text-2xl font-bold text-slate-800">Remedial & Pengayaan</h3>
                         <p class="text-slate-500 text-sm">Identifikasi otomatis siswa remedial dan pengayaan kelas aktif.</p>
                     </div>
+                    <button data-ai id="btnRecommendAI" onclick="recommendFollowUpsAI()" class="no-print px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow hover:bg-indigo-700 transition">🪄 Rekomendasi Tindak Lanjut AI</button>
                 </div>
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                     <div class="overflow-x-auto">
