@@ -384,11 +384,18 @@ def mock_ai(ctx, handler):
     ctx.route('**://script.google.com/**', route)
     return log
 
+STATIC_MODELS = ['gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-2.5-flash']
+def pick_model(page, sel, txt, value):
+    if value in STATIC_MODELS or value == '':
+        page.select_option(sel, value)
+    else:
+        page.select_option(sel, '__custom__'); page.fill(txt, value)
+
 def ai_form(page, enabled=True, mode='proxy', url=PROXY_URL, secret=SECRET, model='gemini-3.8-flash', privacy=True):
     goto_view(page, 'Pengaturan')
     page.set_checked('#setAiEnabled', enabled)
     page.select_option('#setAiMode', mode)
-    page.fill('#setAiProxyUrl', url); page.fill('#setAiModel', model)
+    page.fill('#setAiProxyUrl', url); pick_model(page, '#setAiModelSelect', '#setAiModel', model)
     if secret is not None: page.fill('#setAiSecret', secret)
     page.set_checked('#setAiPrivacy', privacy)
     page.evaluate("AIUI.save()")
@@ -504,9 +511,9 @@ def run_tahap2(br):
         if 'gemini-3.6-flash' in rec['url']: return 200, GEM_OK
         return 503, {"error": {"code": 503, "status": "UNAVAILABLE", "message": "The model is overloaded. Please try again later."}}
     page, errs = open_page(ctx, INDEX, t1_seed()); log = mock_ai(ctx, overloaded)
-    ai_form(page, mode='direct', url=''); page.fill('#setAiFallback', 'bukan model'); page.evaluate("AIUI.save()"); m_bad = ai_msg(page)
+    ai_form(page, mode='direct', url=''); pick_model(page, '#setAiFallbackSelect', '#setAiFallback', 'bukan model'); page.evaluate("AIUI.save()"); m_bad = ai_msg(page)
     check('W3f1 nama model cadangan yang tidak valid ditolak', 'cadangan' in m_bad, m_bad)
-    page.fill('#setAiFallback', 'gemini-3.6-flash'); page.evaluate("AIUI.save()")
+    pick_model(page, '#setAiFallbackSelect', '#setAiFallback', 'gemini-3.6-flash'); page.evaluate("AIUI.save()")
     check('W3f2 model cadangan tersimpan', page.evaluate("JSON.parse(localStorage.getItem('g_set')).ai.fallbackModel") == 'gemini-3.6-flash')
     msg = ai_test(page)
     check('W3f3 model utama 503 berulang: otomatis pindah ke model cadangan dan Uji Koneksi melaporkannya', 'Koneksi berhasil' in msg and 'MODEL CADANGAN' in msg and 'gemini-3.6-flash' in msg, msg)
@@ -986,6 +993,115 @@ def run_tahap4(br):
     check('Y6b nama dan NIS yang diketik guru di topik bebas diganti kode sebelum dikirim', 'Siti Aminah' not in pr and '1002' not in pr and '[S02]' in pr, pr[:300])
     ctx.close()
 
+# ------------------------------------------------------------------ Pengaturan AI lanjutan: konfigurasi bersama, dropdown model, gaya ringkas
+CFG_URL = 'https://script.google.com/macros/s/CFG999/exec'
+CFG_TOKEN = 'CFGTOKEN-0123456789ABC'
+def shared_cfg_script(model='gemini-3.5-flash-lite'):
+    return "window.APP_CONFIG = {ai: {proxyUrl: %s, token: %s, model: %s, fallbackModel: ''}};" % (json.dumps(CFG_URL), json.dumps(CFG_TOKEN), json.dumps(model))
+
+def cfg_proxy(rec):
+    env = rec['body'] or {}
+    if env.get('token') != CFG_TOKEN: return 200, {"proxyError": "AUTH"}
+    if env.get('op') == 'ping': return 200, {"ok": True, "status": 200, "ping": True}
+    if env.get('op') == 'models': return 200, {"ok": True, "status": 200, "data": {"models": [{"name": "models/gemini-3.6-flash", "supportedGenerationMethods": ["generateContent"]}]}}
+    return 200, {"ok": True, "status": 200, "data": GEM_OK}
+
+def run_ai_settings(br):
+    # --- Z1 konfigurasi bersama: guru tidak mengisi URL/token
+    ctx = new_ctx(br)
+    page, errs = open_page(ctx, INDEX, t1_seed(), shared_cfg_script()); log = mock_ai(ctx, cfg_proxy)
+    check('Z1a konfigurasi bersama terdeteksi dan AI otomatis aktif untuk guru yang belum mengatur apa pun',
+          page.evaluate("AIUI.isManaged()") is True and page.evaluate("settings.ai.enabled") is True, page.evaluate("settings.ai"))
+    goto_view(page, 'Pengaturan')
+    ui = page.evaluate("({note: !document.getElementById('aiManagedNote').classList.contains('hidden'), conn: !document.getElementById('aiConnGroup').classList.contains('hidden'), custom: !document.getElementById('aiCustomRow').classList.contains('hidden'), model: document.getElementById('setAiModelSelect').value, clear: !document.getElementById('aiClearBtn').classList.contains('hidden')})")
+    check('Z1b tampilan guru: catatan "diatur admin", kolom URL/token/mode tersembunyi, model bawaan dari konfigurasi', ui == {'note': True, 'conn': False, 'custom': True, 'model': 'gemini-3.5-flash-lite', 'clear': False}, ui)
+    page.set_checked('#setAiPrivacy', True); page.evaluate("AIUI.save()")
+    check('Z1c simpan tanpa mengisi URL/token berhasil; tidak ada rahasia tersimpan di browser guru',
+          'Pengaturan AI disimpan' in ai_msg(page) and page.evaluate("localStorage.getItem('g_ai_secret')") is None and page.evaluate("settings.ai.proxyUrl") == '', ai_msg(page))
+    msg = ai_test(page)
+    check('Z1d Uji Koneksi memakai URL dan token dari konfigurasi bersama dan model bawaannya',
+          'Koneksi berhasil' in msg and log[0]['url'] == CFG_URL and log[0]['body']['token'] == CFG_TOKEN and log[1]['body']['model'] == 'gemini-3.5-flash-lite', (msg, [r['url'] for r in log]))
+    ls = page.evaluate("JSON.stringify(Object.fromEntries(Object.entries(localStorage)))")
+    with page.expect_download() as dl: page.evaluate("backupJSON()")
+    raw = pathlib.Path(dl.value.path()).read_text(encoding='utf8')
+    check('Z1e token konfigurasi tidak ditulis ke localStorage dan tidak masuk backup', CFG_TOKEN not in ls and 'CFG999' not in ls and CFG_TOKEN not in raw and 'CFG999' not in raw)
+    pick_model(page, '#setAiModelSelect', '#setAiModel', 'gemini-3.6-flash'); page.evaluate("AIUI.save()")
+    page.reload(); page.wait_for_function("document.querySelectorAll('#navMenu button').length>0"); goto_view(page, 'Pengaturan')
+    check('Z1f model pilihan guru menang atas model bawaan konfigurasi, dan bertahan setelah muat ulang', page.evaluate("document.getElementById('setAiModelSelect').value") == 'gemini-3.6-flash')
+    page.set_checked('#setAiCustom', True); page.evaluate("AIUI.applyConnVisibility()")
+    vis = page.evaluate("!document.getElementById('aiConnGroup').classList.contains('hidden')")
+    page.evaluate("AIUI.save()"); m = ai_msg(page)
+    check('Z1g mode "sendiri" membuka kolom koneksi dan menuntut URL/token', vis and ('https' in m or 'token' in m.lower()), m)
+    ctx.close()
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed()); goto_view(page, 'Pengaturan')
+    check('Z1h tanpa konfigurasi bersama: perilaku lama (kolom koneksi tampil, opsi "sendiri" tersembunyi)',
+          page.evaluate("AIUI.hasShared()") is False and page.evaluate("!document.getElementById('aiConnGroup').classList.contains('hidden') && document.getElementById('aiCustomRow').classList.contains('hidden')"))
+    ctx.close()
+
+    # --- Z2 dropdown model
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed()); goto_view(page, 'Pengaturan')
+    opts = page.evaluate("[...document.querySelectorAll('#setAiModelSelect option')].map(o=>o.value)")
+    check('Z2a dropdown model berisi model terverifikasi + "Lainnya", bawaan gemini-3.6-flash',
+          opts[:5] == STATIC_MODELS and opts[-1] == '__custom__' and page.evaluate("document.getElementById('setAiModelSelect').value") == 'gemini-3.6-flash', opts)
+    ai_form(page, model='gemini-3.5-flash-lite', mode='direct', url='')
+    check('Z2b memilih model dari dropdown tersimpan', page.evaluate("JSON.parse(localStorage.getItem('g_set')).ai.model") == 'gemini-3.5-flash-lite')
+    page.select_option('#setAiModelSelect', '__custom__')
+    check('Z2c pilihan "Lainnya" memunculkan kolom ketik manual', page.evaluate("!document.getElementById('setAiModel').classList.contains('hidden')"))
+    page.fill('#setAiModel', 'gpt-4'); page.evaluate("AIUI.save()")
+    check('Z2d nama manual yang bukan gemini-* ditolak', 'Nama model tidak valid' in ai_msg(page), ai_msg(page))
+    page.fill('#setAiModel', 'gemini-9.9-flash'); page.evaluate("AIUI.save()")
+    page.reload(); page.wait_for_function("document.querySelectorAll('#navMenu button').length>0"); goto_view(page, 'Pengaturan')
+    sel = page.evaluate("({v: document.getElementById('setAiModelSelect').value, t: document.getElementById('setAiModelSelect').selectedOptions[0].innerText})")
+    check('Z2e model manual tersimpan tampil lagi sebagai pilihan "(tersimpan)"', sel['v'] == 'gemini-9.9-flash' and 'tersimpan' in sel['t'], sel)
+    ctx.close()
+
+    # --- Z3 muat daftar model dari Gemini
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed())
+    def lister(rec):
+        if 'pageToken=P2' in rec['url']: return 200, {"models": [{"name": "models/gemini-3.5-flash-lite", "displayName": "Gemini 3.5 Flash-Lite", "supportedGenerationMethods": ["generateContent"]}]}
+        return 200, {"models": [{"name": "models/gemini-3.6-flash", "displayName": "Gemini 3.6 Flash", "supportedGenerationMethods": ["generateContent"]},
+                                {"name": "models/gemini-embedding-001", "supportedGenerationMethods": ["embedContent"]},
+                                {"name": "models/gemini-3.6-flash-preview-tts", "supportedGenerationMethods": ["generateContent"]},
+                                {"name": "models/gemini-7-flash", "displayName": "Gemini 7 Flash", "supportedGenerationMethods": ["generateContent"]}], "nextPageToken": "P2"}
+    log = mock_ai(ctx, lister); ai_form(page, mode='direct', url='')
+    page.evaluate("AIUI.loadModels()"); page.wait_for_function("document.getElementById('aiModelNote').innerText.includes('model tersedia')", timeout=10000)
+    opts = page.evaluate("[...document.querySelectorAll('#setAiModelSelect option')].map(o=>o.value)")
+    sel_after = page.evaluate("document.getElementById('setAiModelSelect').value")
+    check('Z3a daftar dari Gemini (2 halaman) menggantikan daftar bawaan: tanpa embedding/tts, urut flash-lite > flash, 2 permintaan',
+          opts == ['gemini-3.5-flash-lite', 'gemini-7-flash', 'gemini-3.6-flash', '__custom__'] and len(log) == 2 and sel_after == 'gemini-3.5-flash-lite', (opts, len(log), sel_after))
+    ctx.close()
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed()); mock_ai(ctx, lambda rec: (403, {"error": {"status": "PERMISSION_DENIED"}})); ai_form(page, mode='direct', url='')
+    page.evaluate("AIUI.loadModels()"); page.wait_for_function("document.getElementById('aiModelNote').innerText.includes('Gagal')", timeout=10000)
+    check('Z3b gagal memuat daftar: pesan jelas (AUTH) dan pilihan model tidak berubah', 'AUTH' in page.evaluate("document.getElementById('aiModelNote').innerText") and page.evaluate("document.getElementById('setAiModelSelect').value") == 'gemini-3.8-flash')
+    ctx.close()
+
+    # --- Z4 gaya ringkas hanya untuk fitur internal
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed())
+    def multi(rec):
+        pr = prompt_of(rec)
+        if 'Tafsirkan hasil analisis butir' in pr: return gem(INTERP)
+        if 'Jumlah pertemuan' in pr: return gem(modul_data(2))
+        return gem(followup_builder()(rec))
+    log = mock_ai(ctx, multi); ai_ready(page)
+    goto_view(page, 'Pengaturan'); page.set_checked('#setAiTerse', True); page.set_checked('#setAiPrivacy', True); page.evaluate("AIUI.save()")
+    check('Z4a pengaturan gaya ringkas tersimpan', page.evaluate("settings.ai.styleTerse") is True)
+    page.evaluate("settings.ai.styleTerse = true; saveAllData()")
+    goto_view(page, 'Analisis Ulangan'); page.evaluate("openDailyTestDetail(allDailyTests[0].id)"); page.evaluate("document.getElementById('btnInterpretItems').click()")
+    page.wait_for_function("document.getElementById('itemInterpBox').innerText.includes('Tafsiran AI')", timeout=15000)
+    sys_interp = log[-1]['body']['systemInstruction']['parts'][0]['text']
+    goto_view(page, 'Generator'); page.evaluate("document.querySelector('button[onclick=\"generateModulAjarAI()\"]').click()")
+    page.wait_for_function("!document.getElementById('genResultContainer').classList.contains('hidden')", timeout=15000)
+    sys_modul = log[-1]['body']['systemInstruction']['parts'][0]['text']
+    check('Z4b gaya ringkas aktif: dipakai pada tafsiran ulangan, TIDAK pada modul ajar', 'Gaya jawaban ringkas' in sys_interp and 'Gaya jawaban ringkas' not in sys_modul, (sys_interp[-120:], sys_modul[-80:]))
+    goto_view(page, 'Pengaturan'); page.set_checked('#setAiTerse', False); page.evaluate("AIUI.save()")
+    goto_view(page, 'Analisis Ulangan'); page.evaluate("openDailyTestDetail(allDailyTests[0].id)"); n = len(log); page.evaluate("document.getElementById('btnInterpretItems').click()")
+    page.wait_for_function("document.getElementById('itemInterpBox').innerText.includes('Tafsiran AI')", timeout=15000)
+    check('Z4c gaya ringkas dimatikan: instruksi sistem kembali normal', 'Gaya jawaban ringkas' not in log[-1]['body']['systemInstruction']['parts'][0]['text'] and len(log) == n + 1)
+    goto_view(page, 'Pengaturan')
+    info = page.evaluate("document.getElementById('aiUsageInfo').innerText")
+    check('Z4d penghitung menampilkan token per tugas (interpretasi, modul)', 'interpretasi' in info and 'modul' in info, info)
+    ctx.close()
+
 def main():
     with sync_playwright() as p:
         br = p.chromium.launch()
@@ -1214,6 +1330,7 @@ def main():
         run_tahap2(br)
         run_tahap3(br)
         run_tahap4(br)
+        run_ai_settings(br)
 
         br.close()
 

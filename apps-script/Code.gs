@@ -48,6 +48,20 @@ function doPost(e) {
   // dan tanpa mengurangi batas harian.
   if (req.op === 'ping') return json_({ ok: true, status: 200, ping: true });
 
+  // Daftar model yang tersedia untuk key ini (aplikasi memakainya untuk dropdown). Tidak dihitung
+  // pada batas harian karena tidak memakai model.
+  if (req.op === 'models') {
+    var pt = req.pageToken ? String(req.pageToken) : '';
+    if (pt && !/^[A-Za-z0-9_\-=.]{1,300}$/.test(pt)) return json_({ proxyError: 'BAD_REQUEST' });
+    var mresp = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200' + (pt ? '&pageToken=' + encodeURIComponent(pt) : ''), {
+      headers: { 'x-goog-api-key': key }, muteHttpExceptions: true
+    });
+    var mdata;
+    try { mdata = JSON.parse(mresp.getContentText()); } catch (err) { mdata = { error: { message: 'Respons Gemini bukan JSON' } }; }
+    var mcode = mresp.getResponseCode();
+    return json_({ ok: mcode >= 200 && mcode < 300, status: mcode, data: mdata });
+  }
+
   var model = String(req.model || '');
   if (!MODEL_RE.test(model)) return json_({ proxyError: 'BAD_MODEL' });
   if (!req.request || typeof req.request !== 'object') return json_({ proxyError: 'BAD_REQUEST' });

@@ -6,11 +6,12 @@ Buka `index.html` langsung di browser (tidak perlu server). Perilaku semua menu 
 - `js/core/`: `ids.js` (genId/UUID), `sanitize.js` (esc), `store.js` (penyimpanan, migrasi, metadata), `integrity.js` (hapus berantai, audit).
 - `js/domain/`: logika murni tanpa DOM, diuji di Node. `grading.js` (nilai akhir, predikat, validasi), `itemAnalysis.js` (kesukaran, daya pembeda, pengecoh, KR-20).
 - `js/ai/`: `aiService.js` (satu-satunya pintu ke Gemini), `schema.js`, `anonymizer.js`, `prompts.js`, `fileReader.js` (PDF/DOCX/TXT), `aiUi.js` (Pengaturan AI), `tasks.js` (prompt, skema, validasi, dan normalisasi untuk Analisis CP, Soal/Kisi-kisi, Modul Ajar).
+- `app-config.js`: konfigurasi bersama (URL proxy, token, model bawaan) agar guru tidak mengisi apa pun. Lihat peringatan keamanan di dalamnya.
 - `apps-script/`: `Code.gs` (proxy Gemini) dan `PANDUAN.md` (langkah pasang).
 - `js/app/`: `state.js`, `ui.js`, `app.js` (navigasi, init), `boot.js` (titik masuk).
 - `js/modules/`: satu berkas per menu.
-- `tests/unit/`: 101 uji unit. Jalankan `node --test tests/unit/*.test.js`.
-- `tests/run_tests.py`: 155 uji browser (termasuk menjalankan uji unit). Jalankan `python3 tests/run_tests.py [file_asli.html]`. Butuh `pip install playwright` dan Chromium. Argumen opsional = file asli untuk uji paritas.
+- `tests/unit/`: 108 uji unit. Jalankan `node --test tests/unit/*.test.js`.
+- `tests/run_tests.py`: 174 uji browser (termasuk menjalankan uji unit). Jalankan `python3 tests/run_tests.py [file_asli.html]`. Butuh `pip install playwright` dan Chromium. Argumen opsional = file asli untuk uji paritas.
 - `tools/build_from_original.py`: skrip yang menghasilkan proyek ini dari file asli (untuk jejak audit).
 
 ## Aturan pengembangan
@@ -49,3 +50,9 @@ Buka `index.html` langsung di browser (tidak perlu server). Perilaku semua menu 
 - Rekomendasi remedial/pengayaan: siswa dikirim sebagai kode `[S01]`, nama dipulihkan hanya di layar. Siswa yang nilai akhirnya belum lengkap tidak diikutkan. Hasil divalidasi (kode lengkap, jenis sesuai status). Disimpan sebagai tindak lanjut berstatus Direncanakan; duplikat sejenis dilewati.
 - Tafsiran analisis ulangan hanya menerima statistik butir (tanpa nama atau jawaban per siswa). Angka tetap dari `ItemAnalysis`.
 - Rubrik tugas wajib berbobot tepat 100 (divalidasi, dengan satu perbaikan otomatis).
+
+## Pengaturan AI lanjutan
+- Konfigurasi bersama: bila `app-config.js` berisi `proxyUrl` dan `token`, guru memakainya otomatis (AI aktif bawaan, kolom koneksi tersembunyi). Guru boleh memilih "pakai sendiri". Token konfigurasi tidak pernah ditulis ke localStorage maupun backup.
+- Model dipilih dari dropdown (daftar terverifikasi) atau "Lainnya". Tombol "Muat daftar model dari Gemini" mengambil daftar nyata untuk key tersebut lewat proxy (`op: models`) atau langsung.
+- Gaya ringkas (adaptasi skill caveman tingkat lite) hanya untuk tafsiran analisis ulangan dan rekomendasi tindak lanjut, ditandai `terse: true` pada pemanggilan `AIService.generate`. Dokumen yang dibaca siswa/orang tua tidak pernah memakainya.
+- Penghitung pemakaian mencatat token per tugas sehingga efek gaya ringkas dapat diukur oleh guru.

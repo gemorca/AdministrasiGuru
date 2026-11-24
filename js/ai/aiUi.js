@@ -10,6 +10,75 @@ const AIUI = (() => {
 
     function cfg() { return settings.ai; }
 
+    // ---------- konfigurasi bersama (app-config.js) ----------
+    function sharedCfg() { return (typeof window !== 'undefined' && window.APP_CONFIG && window.APP_CONFIG.ai) || {}; }
+    /** Tersedia konfigurasi bersama (URL proxy dan token terisi di app-config.js). */
+    function hasShared() { const m = sharedCfg(); return !!(m.proxyUrl && m.token); }
+    /** Dipakai bila ada konfigurasi bersama dan guru tidak memilih pengaturan sendiri. */
+    function isManaged() { return hasShared() && !cfg().custom; }
+    function effectiveConfig() {
+        const c = cfg();
+        if (!isManaged()) return c;
+        const m = sharedCfg();
+        return { ...c, mode: 'proxy', proxyUrl: m.proxyUrl,
+            model: c.modelChosen ? c.model : (m.model || c.model), fallbackModel: c.modelChosen ? c.fallbackModel : (m.fallbackModel || c.fallbackModel) };
+    }
+    function effectiveSecret() { return isManaged() ? sharedCfg().token : Store.secretGet(); }
+
+    // ---------- pilihan model ----------
+    const MODEL_CHOICES = [
+        { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash: seimbang (disarankan)' },
+        { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite: hemat dan cepat' },
+        { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
+        { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash: terbaru (kadang padat)' },
+        { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' }
+    ];
+    let modelList = MODEL_CHOICES.slice();
+
+    function fillSelect(selId, txtId, current, allowNone) {
+        const sel = $(selId), txt = $(txtId);
+        const opts = modelList.slice();
+        if (current && !opts.some(o => o.id === current)) opts.unshift({ id: current, label: current + ' (tersimpan)' });
+        sel.innerHTML = (allowNone ? '<option value="">(tanpa model cadangan)</option>' : '') +
+            opts.map(o => `<option value="${esc(o.id)}">${esc(o.label)}</option>`).join('') +
+            '<option value="__custom__">Lainnya (ketik manual)...</option>';
+        sel.value = current || (allowNone ? '' : opts[0].id);
+        txt.value = ''; txt.classList.add('hidden');
+    }
+    function onModelChange(sel, txtId) {
+        const txt = $(txtId);
+        const custom = $(sel).value === '__custom__';
+        txt.classList.toggle('hidden', !custom);
+        if (custom) txt.focus();
+    }
+    function readModel(selId, txtId) {
+        const v = $(selId).value;
+        return v === '__custom__' ? $(txtId).value.trim() : v;
+    }
+
+    let loadingModels = false;
+    async function loadModels() {
+        if (loadingModels) return;
+        const note = $('aiModelNote');
+        const st = AIService.status();
+        if (!st.configured) { note.innerText = 'Lengkapi dan simpan pengaturan koneksi dulu, baru muat daftar model.'; return; }
+        loadingModels = true;
+        const btn = $('aiLoadModelsBtn'); btn.disabled = true;
+        note.innerText = 'Memuat daftar model dari Gemini...';
+        try {
+            const list = await AIService.listModels();
+            if (!list.length) { note.innerText = 'Gemini tidak mengembalikan model yang cocok.'; return; }
+            const keep = c => list.some(x => x.id === c);
+            modelList = list;
+            const main = readModel('setAiModelSelect', 'setAiModel'), fb = readModel('setAiFallbackSelect', 'setAiFallback');
+            fillSelect('setAiModelSelect', 'setAiModel', main && keep(main) ? main : (keep(cfg().model) ? cfg().model : list[0].id), false);
+            fillSelect('setAiFallbackSelect', 'setAiFallback', fb && keep(fb) ? fb : '', true);
+            note.innerText = `${list.length} model tersedia untuk key Anda. Pilihan saat ini dipertahankan bila masih tersedia.`;
+        } catch (e) {
+            note.innerText = `Gagal memuat daftar [${e.code || 'ERROR'}]: ${e.message}`;
+        } finally { loadingModels = false; btn.disabled = false; }
+    }
+
     function msg(text, kind) {
         const el = $('aiStatusMsg');
         if (!el) return;
@@ -21,34 +90,47 @@ const AIUI = (() => {
         el.classList.remove('hidden');
     }
 
-    function onModeChange() {
+    /** Tampilkan/sembunyikan kolom koneksi sesuai mode dan konfigurasi bersama. */
+    function applyConnVisibility() {
+        const shared = hasShared();
+        const custom = shared ? $('setAiCustom').checked : true;
+        $('aiCustomRow').classList.toggle('hidden', !shared);
+        $('aiManagedNote').classList.toggle('hidden', !(shared && !custom));
+        $('aiConnGroup').classList.toggle('hidden', shared && !custom);
         const direct = $('setAiMode').value === 'direct';
         $('aiProxyRow').classList.toggle('hidden', direct);
         $('aiSecretLabel').innerText = direct ? 'API key Gemini (disimpan di browser ini)' : 'Token aplikasi (APP_TOKEN di Apps Script)';
         $('aiDirectWarn').classList.toggle('hidden', !direct);
+        $('aiClearBtn').classList.toggle('hidden', shared && !custom);
     }
+    function onModeChange() { applyConnVisibility(); }
 
     function refreshUsage() {
         const el = $('aiUsageInfo');
         if (!el) return;
         const u = AIService.usageToday();
-        el.innerText = `Hari ini: ${u.requests} permintaan, sekitar ${u.tokens.toLocaleString('id-ID')} token (perkiraan lokal di perangkat ini, bukan angka resmi Google).`;
+        const per = Object.entries(u.tokensByTask || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v.toLocaleString('id-ID')}`).join(', ');
+        el.innerText = `Hari ini: ${u.requests} permintaan, sekitar ${u.tokens.toLocaleString('id-ID')} token${per ? ' (' + per + ')' : ''}. Perkiraan lokal di perangkat ini, bukan angka resmi Google.`;
     }
 
     function render() {
         if (!$('setAiMode')) return;
         const c = cfg();
         $('setAiEnabled').checked = !!c.enabled;
+        $('setAiCustom').checked = !!c.custom;
         $('setAiMode').value = c.mode === 'direct' ? 'direct' : 'proxy';
         $('setAiProxyUrl').value = c.proxyUrl || '';
-        $('setAiModel').value = c.model || AIService.DEFAULT_MODEL;
+        const eff = effectiveConfig();
+        fillSelect('setAiModelSelect', 'setAiModel', eff.model || AIService.DEFAULT_MODEL, false);
+        fillSelect('setAiFallbackSelect', 'setAiFallback', eff.fallbackModel || '', true);
+        $('aiModelNote').innerText = '';
         $('setAiAllowNames').checked = !!c.allowNames;
-        $('setAiFallback').value = c.fallbackModel || '';
+        $('setAiTerse').checked = !!c.styleTerse;
         $('setAiPrivacy').checked = !!c.privacyAckAt;
         const s = $('setAiSecret');
         s.value = '';
         s.placeholder = Store.secretGet() ? '•••••••• tersimpan (kosongkan bila tidak diganti)' : 'Belum diisi';
-        onModeChange();
+        applyConnVisibility();
         refreshUsage();
         applyVisibility();
         const st = AIService.status();
@@ -59,33 +141,48 @@ const AIUI = (() => {
 
     function save() {
         const c = cfg();
+        const shared = hasShared();
+        const custom = shared ? $('setAiCustom').checked : true;
+        const managedNow = shared && !custom;
         const mode = $('setAiMode').value === 'direct' ? 'direct' : 'proxy';
         const proxyUrl = $('setAiProxyUrl').value.trim();
-        const model = $('setAiModel').value.trim();
+        const model = readModel('setAiModelSelect', 'setAiModel');
+        const fallback = readModel('setAiFallbackSelect', 'setAiFallback');
         const secretIn = $('setAiSecret').value.trim();
         const enabled = $('setAiEnabled').checked;
         const privacy = $('setAiPrivacy').checked;
 
         const errs = [];
-        const fallback = $('setAiFallback').value.trim();
         if (!MODEL_RE.test(model)) errs.push('Nama model tidak valid (contoh: gemini-3.6-flash).');
-        if (fallback && !MODEL_RE.test(fallback)) errs.push('Nama model cadangan tidak valid (contoh: gemini-3.6-flash).');
-        if (mode === 'proxy') {
-            let ok = false;
-            try { const u = new URL(proxyUrl); ok = u.protocol === 'https:'; } catch (_) {}
-            if (!ok && (enabled || proxyUrl)) errs.push('URL Web App harus diawali https:// (salin dari hasil Deploy Apps Script, berakhiran /exec).');
+        if (fallback && !MODEL_RE.test(fallback)) errs.push('Nama model cadangan tidak valid (contoh: gemini-3.5-flash-lite).');
+        if (!managedNow) {
+            if (mode === 'proxy') {
+                let ok = false;
+                try { const u = new URL(proxyUrl); ok = u.protocol === 'https:'; } catch (_) {}
+                if (!ok && (enabled || proxyUrl)) errs.push('URL Web App harus diawali https:// (salin dari hasil Deploy Apps Script, berakhiran /exec).');
+            }
+            if (/\s/.test(secretIn)) errs.push('Kunci/token tidak boleh mengandung spasi.');
+            if (enabled && !secretIn && !Store.secretGet()) errs.push(mode === 'proxy' ? 'Isi token aplikasi.' : 'Isi API key Gemini.');
         }
-        if (/\s/.test(secretIn)) errs.push('Kunci/token tidak boleh mengandung spasi.');
-        if (enabled && !secretIn && !Store.secretGet()) errs.push(mode === 'proxy' ? 'Isi token aplikasi.' : 'Isi API key Gemini.');
         if (enabled && !privacy && !c.privacyAckAt) errs.push('Centang persetujuan pemberitahuan privasi untuk mengaktifkan AI.');
         if (errs.length) { msg(errs.join(' '), 'err'); return false; }
 
-        if (secretIn) Store.secretSet(secretIn);
-        if (mode !== c.mode || proxyUrl !== c.proxyUrl || model !== c.model || fallback !== (c.fallbackModel || '') || secretIn) { c.styleResolved = null; c.lastTestOk = null; }
-        c.enabled = enabled; c.mode = mode; c.proxyUrl = proxyUrl; c.model = model; c.fallbackModel = fallback;
+        const prevEff = effectiveConfig();
+        if (!managedNow) {
+            if (secretIn) Store.secretSet(secretIn);
+            c.mode = mode; c.proxyUrl = proxyUrl;
+        }
+        c.custom = custom;
+        c.model = model; c.fallbackModel = fallback; c.modelChosen = true; c.touched = true;
+        c.enabled = enabled;
         c.allowNames = $('setAiAllowNames').checked;
+        c.styleTerse = $('setAiTerse').checked;
         if (privacy && !c.privacyAckAt) c.privacyAckAt = new Date().toISOString();
         if (!privacy) c.privacyAckAt = null;
+        const eff = effectiveConfig();
+        if (eff.mode !== prevEff.mode || eff.proxyUrl !== prevEff.proxyUrl || eff.model !== prevEff.model || eff.fallbackModel !== prevEff.fallbackModel || secretIn || managedNow !== isManaged()) {
+            c.styleResolved = null; c.lastTestOk = null;
+        }
         saveAllData();
         render();
         msg('Pengaturan AI disimpan. Tekan "Uji Koneksi" untuk memastikan semuanya benar.', 'ok');
@@ -122,7 +219,7 @@ const AIUI = (() => {
 
     function clearSecret() {
         Store.secretClear();
-        cfg().enabled = false;
+        cfg().enabled = false; cfg().touched = true;
         saveAllData();
         render();
         msg('Kunci/token dihapus dari browser ini dan fitur AI dimatikan.', 'ok');
@@ -212,9 +309,12 @@ const AIUI = (() => {
 
     function init() {
         AIService.use({
+            config: effectiveConfig, secret: effectiveSecret,
             onStyleResolved: s => { cfg().styleResolved = s; saveAllData(); }
         });
+        // Konfigurasi bersama: AI aktif otomatis untuk guru yang belum pernah mengubah pengaturan.
+        if (isManaged() && !cfg().touched && !cfg().enabled) { cfg().enabled = true; saveAllData(); }
     }
 
-    return { review, reviewSave, reviewCancel, pii, fail, run, render, save, test, clearSecret, onModeChange, ensureReady, acceptPrivacy, applyVisibility, refreshUsage, init, HIDE_WHEN_OFF };
+    return { review, reviewSave, reviewCancel, pii, fail, run, render, save, test, clearSecret, onModeChange, onModelChange, loadModels, applyConnVisibility, isManaged, hasShared, MODEL_CHOICES, ensureReady, acceptPrivacy, applyVisibility, refreshUsage, init, HIDE_WHEN_OFF };
 })();

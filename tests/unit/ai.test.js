@@ -414,3 +414,73 @@ test('ping melaporkan pemakaian model cadangan', async () => {
     const r = await AIService.ping();
     assert.equal(r.fallback, true); assert.equal(r.model, 'c');
 });
+
+// ---------- gaya ringkas (hanya fitur internal) ----------
+const Prompts = require('../../js/ai/prompts.js');
+test('terse: hanya dipakai bila fitur menandai terse DAN guru mengaktifkan; tugas dokumen tidak pernah', async () => {
+    const m = setup({ cfg: { styleTerse: true }, responses: [ok('a'), ok('b'), ok('c')] });
+    await AIService.generate({ task: 'interpretasi', prompt: 'x', terse: true });
+    await AIService.generate({ task: 'modul', prompt: 'x' });                           // tidak menandai terse
+    assert.ok(m.calls[0].body.systemInstruction.parts[0].text.includes(Prompts.TERSE));
+    assert.ok(m.calls[0].body.systemInstruction.parts[0].text.includes('Kurikulum Merdeka'));     // basis tetap ada
+    assert.ok(!m.calls[1].body.systemInstruction.parts[0].text.includes('Gaya jawaban ringkas'));
+    const m2 = setup({ cfg: { styleTerse: false }, responses: [ok('a')] });
+    await AIService.generate({ task: 'interpretasi', prompt: 'x', terse: true });
+    assert.ok(!m2.calls[0].body.systemInstruction.parts[0].text.includes('Gaya jawaban ringkas'));
+});
+
+test('terse: aturan menjaga kata negasi, angka, dan kalimat lengkap', () => {
+    assert.match(Prompts.TERSE, /tidak/); assert.match(Prompts.TERSE, /bukan/); assert.match(Prompts.TERSE, /hanya/); assert.match(Prompts.TERSE, /kecuali/);
+    assert.match(Prompts.TERSE, /angka/); assert.match(Prompts.TERSE, /lengkap dan sopan/);
+});
+
+test('pemakaian: token dicatat per tugas', async () => {
+    const m = setup({ responses: [ok('a'), ok('b'), ok('c')] });
+    await AIService.generate({ task: 'interpretasi', prompt: 'x' });
+    await AIService.generate({ task: 'interpretasi', prompt: 'x' });
+    await AIService.generate({ task: 'modul', prompt: 'x' });
+    assert.deepEqual(m.usage().tokensByTask, { interpretasi: 84, modul: 42 });
+});
+
+// ---------- daftar model ----------
+const mdl = (name, methods = ['generateContent'], displayName) => ({ name: 'models/' + name, displayName: displayName || name, supportedGenerationMethods: methods });
+const LIST = [mdl('gemini-3.8-flash'), mdl('gemini-3.6-flash', undefined, 'Gemini 3.6 Flash'), mdl('gemini-3.5-flash-lite'), mdl('gemini-3.5-pro'),
+    mdl('gemini-embedding-001', ['embedContent']), mdl('gemini-3.6-flash-preview-tts'), mdl('gemini-3.6-flash-image'), mdl('gemini-live-3'),
+    mdl('gemini-3.6-flash-native-audio'), mdl('gemma-3-27b'), mdl('imagen-4', ['predict']), mdl('gemini-nongenerate', ['countTokens']), mdl('gemini-3.6-flash')];
+
+test('filterModels: hanya gemini yang mendukung generateContent, tanpa embedding/tts/gambar/live, tanpa duplikat, flash lebih dulu', () => {
+    const r = AIService.filterModels(LIST);
+    assert.deepEqual(r.map(x => x.id), ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-pro']);
+    assert.equal(r.find(x => x.id === 'gemini-3.6-flash').label, 'Gemini 3.6 Flash');
+    assert.deepEqual(AIService.filterModels(null), []);
+});
+
+test('listModels mode langsung: GET dengan header key, mengikuti halaman berikutnya', async () => {
+    const m = setup({ responses: [
+        { status: 200, json: { models: [mdl('gemini-3.6-flash')], nextPageToken: 'P2' } },
+        { status: 200, json: { models: [mdl('gemini-3.5-flash-lite')] } }] });
+    const r = await AIService.listModels();
+    assert.deepEqual(r.map(x => x.id), ['gemini-3.5-flash-lite', 'gemini-3.6-flash']);
+    assert.equal(m.calls.length, 2);
+    assert.equal(m.calls[0].init.method, 'GET'); assert.equal(m.calls[0].init.headers['x-goog-api-key'], 'KEY-123');
+    assert.ok(m.calls[0].url.startsWith('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200'));
+    assert.ok(!m.calls[0].url.includes('KEY-123')); assert.ok(m.calls[1].url.includes('pageToken=P2'));
+});
+
+test('listModels mode proxy: op models lewat proxy; galat dipetakan', async () => {
+    const m = setup({ cfg: proxyCfg, secret: 'TOK', responses: [{ status: 200, json: { ok: true, status: 200, data: { models: [mdl('gemini-3.6-flash')] } } }] });
+    assert.deepEqual((await AIService.listModels()).map(x => x.id), ['gemini-3.6-flash']);
+    assert.deepEqual(m.calls[0].body, { token: 'TOK', op: 'models', pageToken: null });
+    setup({ cfg: proxyCfg, responses: [{ status: 200, json: { proxyError: 'BAD_MODEL' } }] });
+    await assert.rejects(AIService.listModels(), e => e.code === 'PROXY_OLD');
+    setup({ cfg: proxyCfg, responses: [{ status: 200, json: { proxyError: 'AUTH' } }] });
+    await assert.rejects(AIService.listModels(), e => e.code === 'PROXY_AUTH');
+    setup({ cfg: proxyCfg, responses: [{ status: 200, json: { ok: false, status: 403, data: { error: {} } } }] });
+    await assert.rejects(AIService.listModels(), e => e.code === 'AUTH');
+    setup({ responses: [httpErr(403, {})] });
+    await assert.rejects(AIService.listModels(), e => e.code === 'AUTH');
+    setup({ responses: [{ status: 200, json: {} }] });
+    await assert.rejects(AIService.listModels(), e => e.code === 'EMPTY');
+    setup({ secret: '' });
+    await assert.rejects(AIService.listModels(), e => e.code === 'NOT_CONFIGURED');
+});

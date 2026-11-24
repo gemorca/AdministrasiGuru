@@ -18,7 +18,8 @@
             ...Grading.DEFAULTS,
             ai: {
                 enabled: false, mode: 'proxy', proxyUrl: '', model: 'gemini-3.6-flash', fallbackModel: '',
-                style: 'auto', styleResolved: null, privacyAckAt: null, allowNames: false
+                style: 'auto', styleResolved: null, privacyAckAt: null, allowNames: false,
+                styleTerse: false, custom: false, touched: false, modelChosen: false, lastTestOk: null
             }
         };
 

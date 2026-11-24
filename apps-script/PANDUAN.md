@@ -28,6 +28,13 @@ Tujuan: API key Gemini tersimpan di Google, bukan di browser guru. Aplikasi hany
 2. Centang Aktifkan, pilih "Lewat proxy Google Apps Script", tempel URL Web App, isi token, isi nama model, centang persetujuan privasi.
 3. Simpan Pengaturan AI, lalu tekan Uji Koneksi. Pesan hijau berarti siap.
 
+## 5. Agar guru tidak perlu mengisi URL dan token (konfigurasi bersama)
+1. Buka `app-config.js` di folder aplikasi. Isi `proxyUrl` (URL Web App) dan `token` (sama dengan `APP_TOKEN`). Isi juga `model` bawaan bila perlu.
+2. Deploy ulang aplikasi ke Vercel. Setelah itu guru yang membuka aplikasi langsung tersambung: AI aktif otomatis, kolom URL dan token tersembunyi. Guru hanya menyetujui pemberitahuan privasi sekali dan menekan Simpan.
+3. Guru tetap bisa memilih model sendiri dari dropdown, dan bisa memilih "Pakai proxy/token atau API key sendiri" bila perlu.
+
+**Penting:** `app-config.js` ikut terkirim ke browser, jadi token terlihat oleh siapa pun yang bisa membuka situs. Ini bukan rahasia sungguhan. Batasi dampaknya: atur `DAILY_LIMIT` yang wajar, jangan taruh API key Gemini di berkas itu, dan ganti `APP_TOKEN` (di Script Properties dan di `app-config.js`) bila ada kecurigaan. Penyelesaian tuntas adalah login Google (rencana Tahap 7).
+
 ## Pemecahan masalah
 | Pesan | Penyebab dan solusi |
 |---|---|

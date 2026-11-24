@@ -1650,41 +1650,50 @@
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4 max-w-3xl mt-6" id="aiSettingsCard">
                     <h4 class="font-bold text-slate-800 border-b pb-2">AI (Google Gemini)</h4>
                     <label class="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" id="setAiEnabled"> Aktifkan fitur AI</label>
-                    <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1">Cara terhubung</label>
-                        <select id="setAiMode" onchange="AIUI.onModeChange()" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
-                            <option value="proxy">Lewat proxy Google Apps Script (disarankan, API key aman di server)</option>
-                            <option value="direct">Langsung dengan API key (key tersimpan di browser ini)</option>
-                        </select>
-                    </div>
-                    <div id="aiProxyRow">
-                        <label class="block text-xs font-bold text-slate-700 mb-1">URL Web App Apps Script (berakhiran /exec)</label>
-                        <input type="url" id="setAiProxyUrl" placeholder="https://script.google.com/macros/s/.../exec" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
-                    </div>
-                    <div>
-                        <label id="aiSecretLabel" class="block text-xs font-bold text-slate-700 mb-1"></label>
-                        <input type="password" id="setAiSecret" autocomplete="off" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
-                        <div id="aiDirectWarn" class="hidden text-[11px] text-amber-700 mt-1">Key di browser dapat terbaca siapa pun yang memakai perangkat ini. Pakai key khusus aplikasi ini dan batasi kuotanya di Google AI Studio.</div>
+                    <div id="aiManagedNote" class="hidden text-xs bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl p-3">Koneksi AI sudah diatur oleh admin sekolah. Anda tidak perlu mengisi URL atau token. Cukup aktifkan AI, setujui privasi, lalu Simpan.</div>
+                    <label id="aiCustomRow" class="hidden flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" id="setAiCustom" onchange="AIUI.applyConnVisibility()"> Pakai proxy/token atau API key sendiri (lanjutan)</label>
+                    <div id="aiConnGroup" class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Cara terhubung</label>
+                            <select id="setAiMode" onchange="AIUI.onModeChange()" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
+                                <option value="proxy">Lewat proxy Google Apps Script (disarankan, API key aman di server)</option>
+                                <option value="direct">Langsung dengan API key (key tersimpan di browser ini)</option>
+                            </select>
+                        </div>
+                        <div id="aiProxyRow">
+                            <label class="block text-xs font-bold text-slate-700 mb-1">URL Web App Apps Script (berakhiran /exec)</label>
+                            <input type="url" id="setAiProxyUrl" placeholder="https://script.google.com/macros/s/.../exec" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
+                        </div>
+                        <div>
+                            <label id="aiSecretLabel" class="block text-xs font-bold text-slate-700 mb-1"></label>
+                            <input type="password" id="setAiSecret" autocomplete="off" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
+                            <div id="aiDirectWarn" class="hidden text-[11px] text-amber-700 mt-1">Key di browser dapat terbaca siapa pun yang memakai perangkat ini. Pakai key khusus aplikasi ini dan batasi kuotanya di Google AI Studio.</div>
+                        </div>
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-slate-700 mb-1">Model</label>
-                        <input type="text" id="setAiModel" list="aiModelList" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
-                        <datalist id="aiModelList"><option value="gemini-3.6-flash"><option value="gemini-3.5-flash-lite"><option value="gemini-3.5-flash"><option value="gemini-3.8-flash"><option value="gemini-2.5-flash"></datalist>
-                        <div class="text-[11px] text-slate-500 mt-1">Cek daftar model dan kuota terbaru di Google AI Studio. Nama model bisa berubah.</div>
+                        <select id="setAiModelSelect" onchange="AIUI.onModelChange('setAiModelSelect', 'setAiModel')" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm"></select>
+                        <input type="text" id="setAiModel" placeholder="ketik nama model, mis. gemini-3.6-flash" class="hidden mt-2 w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
+                        <div class="flex items-center gap-2 mt-1">
+                            <button id="aiLoadModelsBtn" type="button" onclick="AIUI.loadModels()" class="text-[11px] font-bold text-blue-600 underline">Muat daftar model dari Gemini</button>
+                            <span id="aiModelNote" class="text-[11px] text-slate-500"></span>
+                        </div>
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-slate-700 mb-1">Model cadangan (opsional)</label>
-                        <input type="text" id="setAiFallback" list="aiModelList" placeholder="mis. gemini-3.6-flash" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
+                        <select id="setAiFallbackSelect" onchange="AIUI.onModelChange('setAiFallbackSelect', 'setAiFallback')" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm"></select>
+                        <input type="text" id="setAiFallback" placeholder="ketik nama model cadangan" class="hidden mt-2 w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
                         <div class="text-[11px] text-slate-500 mt-1">Dipakai otomatis satu kali bila model utama menjawab error 5xx (misal 503 karena model sedang padat).</div>
                     </div>
                     <label class="flex items-start gap-2 text-sm"><input type="checkbox" id="setAiPrivacy" class="mt-1"> <span>Saya mengerti bahwa data yang diminta AI diproses oleh layanan Google Gemini. Nama dan NIS siswa diganti kode sebelum dikirim.</span></label>
                     <label class="flex items-start gap-2 text-sm text-slate-500"><input type="checkbox" id="setAiAllowNames" class="mt-1"> <span>Izinkan nama siswa ikut terkirim (tidak disarankan).</span></label>
+                    <label class="flex items-start gap-2 text-sm"><input type="checkbox" id="setAiTerse" class="mt-1"> <span>Gaya ringkas (hemat token) untuk <b>tafsiran analisis ulangan</b> dan <b>rekomendasi tindak lanjut</b>. Modul ajar, soal, rapor, dan surat tetap memakai bahasa penuh.</span></label>
                     <div id="aiStatusMsg" class="hidden"></div>
                     <div id="aiUsageInfo" class="text-[11px] text-slate-500"></div>
                     <div class="flex flex-wrap gap-2">
                         <button onclick="AIUI.save()" class="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow hover:bg-blue-700 transition">Simpan Pengaturan AI</button>
                         <button id="aiTestBtn" onclick="AIUI.test()" class="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow hover:bg-emerald-700 transition">Uji Koneksi</button>
-                        <button onclick="AIUI.clearSecret()" class="bg-red-50 text-red-600 border border-red-200 px-5 py-2.5 rounded-xl font-bold text-sm">Hapus Kunci</button>
+                        <button id="aiClearBtn" onclick="AIUI.clearSecret()" class="bg-red-50 text-red-600 border border-red-200 px-5 py-2.5 rounded-xl font-bold text-sm">Hapus Kunci</button>
                     </div>
                 </div>
             </div>
@@ -2154,6 +2163,7 @@
     </div>
 
     <!-- JAVASCRIPT LOGIC -->
+    <script src="app-config.js"></script>
     <script src="js/core/ids.js"></script>
     <script src="js/core/sanitize.js"></script>
     <script src="js/core/store.js"></script>

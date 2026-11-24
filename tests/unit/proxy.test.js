@@ -151,3 +151,18 @@ test('proxy: testGemini mengukur waktu, memakai TEST_MODEL, dan tidak membocorka
     const n = makeProxy({ GEMINI_API_KEY: '' }); n.sandbox.testGemini();
     assert.equal(n.fetched.length, 0);
 });
+
+test('proxy: op models meneruskan daftar model tanpa mengurangi batas harian; pageToken divalidasi', () => {
+    const p = makeProxy({ DAILY_LIMIT: '1' }, url => ({ getResponseCode: () => 200, getContentText: () => JSON.stringify({ models: [{ name: 'models/gemini-3.6-flash' }] }) }));
+    const r = p.post({ token: 'tok-secret-1234567890', op: 'models' });
+    assert.equal(r.ok, true); assert.equal(r.data.models[0].name, 'models/gemini-3.6-flash');
+    assert.equal(p.fetched[0].url, 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=200');
+    assert.equal(p.fetched[0].opt.headers['x-goog-api-key'], 'REAL-GEMINI-KEY');
+    p.post({ token: 'tok-secret-1234567890', op: 'models', pageToken: 'AbC_-=.9' });
+    assert.ok(p.fetched[1].url.endsWith('&pageToken=AbC_-%3D.9'));
+    assert.equal(p.store.USAGE, undefined);
+    assert.deepEqual(p.post({ token: 'tok-secret-1234567890', op: 'models', pageToken: 'x&y=../evil' }), { proxyError: 'BAD_REQUEST' });
+    assert.deepEqual(p.post({ token: 'salah', op: 'models' }), { proxyError: 'AUTH' });
+    assert.equal(p.fetched.length, 2);
+    assert.ok(!JSON.stringify(r).includes('REAL-GEMINI-KEY'));
+});

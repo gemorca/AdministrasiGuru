@@ -433,7 +433,7 @@
                 const pii = AIUI.pii();
                 const tp = dt.tpId ? tpList.find(t => t.tpId === dt.tpId) : null;
                 const t = AITasks.interp.build({ dt, tp, stats });
-                const r = await AIService.generate({ task: 'interpretasi', ...t, signal, pii });
+                const r = await AIService.generate({ task: 'interpretasi', ...t, terse: true, signal, pii });
                 return r.data;
             });
             if (!d) return;

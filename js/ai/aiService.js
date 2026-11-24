@@ -20,6 +20,7 @@ const AIService = (() => {
     const _Prompts = (typeof Prompts !== 'undefined') ? Prompts : require('./prompts.js');
 
     const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models/';
+    const GEMINI_LIST = 'https://generativelanguage.googleapis.com/v1beta/models';
     const DEFAULT_MODEL = 'gemini-3.6-flash';
     const USAGE_KEY = 'g_ai_usage';
 
@@ -96,7 +97,7 @@ const AIService = (() => {
     function usageToday() {
         const u = deps.usageGet();
         const d = deps.today();
-        return (u && u.date === d) ? u : { date: d, requests: 0, tokens: 0, byTask: {} };
+        return (u && u.date === d) ? { tokensByTask: {}, ...u } : { date: d, requests: 0, tokens: 0, byTask: {}, tokensByTask: {} };
     }
     function recordUsage(task, tokens) {
         const u = usageToday();
@@ -275,6 +276,9 @@ const AIService = (() => {
             if (leaks.length) throw err('PII_BLOCKED', { leaks: leaks.length });
         }
 
+        // Gaya ringkas hanya bila fitur menandai terse:true (tugas internal) DAN guru mengaktifkannya.
+        if (o.terse && cfg.styleTerse) o = { ...o, system: (o.system || _Prompts.BASE_SYSTEM) + '\n' + _Prompts.TERSE };
+
         const t0 = deps.now();
         const styles = o.schema ? styleOrder(cfg) : ['none'];
         let si = 0, repaired = false, extraTurns = [];
@@ -294,7 +298,7 @@ const AIService = (() => {
                 throw e;
             }
             const tokens = (json.usageMetadata && json.usageMetadata.totalTokenCount) || 0;
-            if (tokens) { const u = usageToday(); u.tokens += tokens; deps.usageSet(u); }
+            if (tokens) { const u = usageToday(); u.tokens += tokens; u.tokensByTask[o.task || 'lain'] = (u.tokensByTask[o.task || 'lain'] || 0) + tokens; deps.usageSet(u); }
             const text = extract(json);
             const meta = { text, tokens, style, model: useCfg.model || DEFAULT_MODEL, fallback: usedFallback, ms: deps.now() - t0 };
             if (!o.schema) return meta;
@@ -316,6 +320,68 @@ const AIService = (() => {
             }
             throw err('INVALID_JSON', { raw: text, problems });
         }
+    }
+
+    // ---------- daftar model yang tersedia untuk key ----------
+    const MODEL_EXCLUDE = /embedding|tts|image|imagen|veo|live|audio|robotics|aqa|computer-use|vision|learnlm|gemma/i;
+    function filterModels(models) {
+        const out = [];
+        for (const m of models || []) {
+            const id = String(m.name || '').replace(/^models\//, '');
+            if (!/^gemini-/.test(id) || MODEL_EXCLUDE.test(id)) continue;
+            if (!(m.supportedGenerationMethods || []).includes('generateContent')) continue;
+            out.push({ id, label: m.displayName || id });
+        }
+        const rank = id => /flash-lite/.test(id) ? 0 : /flash/.test(id) ? 1 : /pro/.test(id) ? 2 : 3;
+        const uniq = new Map();
+        for (const x of out) if (!uniq.has(x.id)) uniq.set(x.id, x);
+        return Array.from(uniq.values()).sort((a, b) => rank(a.id) - rank(b.id) || b.id.localeCompare(a.id, 'en', { numeric: true }));
+    }
+
+    async function listModels(signal) {
+        const st = status();
+        if (!st.configured) throw err('NOT_CONFIGURED');
+        if (!deps.online()) throw err('OFFLINE');
+        const cfg = deps.config(), secret = deps.secret();
+        const all = [];
+        let pageToken = null;
+        for (let page = 0; page < 4; page++) {
+            const ctl = new AbortController();
+            const onAbort = () => ctl.abort('user');
+            if (signal) { if (signal.aborted) throw err('ABORTED'); signal.addEventListener('abort', onAbort, { once: true }); }
+            const timer = setTimeout(() => ctl.abort('timeout'), 20000);
+            let json;
+            try {
+                if (st.mode === 'direct') {
+                    const url = GEMINI_LIST + '?pageSize=200' + (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : '');
+                    const res = await deps.fetch(url, { method: 'GET', headers: { 'x-goog-api-key': secret }, signal: ctl.signal });
+                    let j = null; try { j = await res.json(); } catch (_) {}
+                    if (res.status < 200 || res.status >= 300) throw mapHttpError(res.status, j);
+                    json = j;
+                } else {
+                    const res = await deps.fetch(cfg.proxyUrl, {
+                        method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({ token: secret, op: 'models', pageToken }), signal: ctl.signal
+                    });
+                    let env = null; try { env = await res.json(); } catch (_) { throw err('PROXY_CONFIG'); }
+                    if (!env || typeof env !== 'object') throw err('PROXY_CONFIG');
+                    if (env.proxyError === 'AUTH') throw err('PROXY_AUTH');
+                    if (env.proxyError === 'BAD_REQUEST' || env.proxyError === 'BAD_MODEL') throw err('PROXY_OLD');
+                    if (env.proxyError) throw err('PROXY_CONFIG', { message: MESSAGES.PROXY_CONFIG + ' (' + env.proxyError + ')' });
+                    if (env.status < 200 || env.status >= 300) throw mapHttpError(env.status, env.data);
+                    json = env.data;
+                }
+            } catch (e) {
+                if (e instanceof AIError) throw e;
+                if (ctl.signal.aborted) throw err(ctl.signal.reason === 'timeout' ? 'TIMEOUT' : 'ABORTED');
+                throw err(deps.online() ? 'NETWORK' : 'OFFLINE');
+            } finally { clearTimeout(timer); if (signal) signal.removeEventListener('abort', onAbort); }
+            if (!json || !Array.isArray(json.models)) throw err('EMPTY');
+            all.push(...json.models);
+            pageToken = json.nextPageToken || null;
+            if (!pageToken) break;
+        }
+        return filterModels(all);
     }
 
     /** Tahap 1 uji koneksi (hanya mode proxy): membuktikan URL, deploy, dan token tanpa memanggil Gemini. */
@@ -378,7 +444,7 @@ const AIService = (() => {
         }
     }
 
-    return { AIError, use, sendableSchema, status, generate, ping, usageToday, MESSAGES, DEFAULT_MODEL, buildBody, mapHttpError, extract, parseJson };
+    return { AIError, use, sendableSchema, listModels, filterModels, status, generate, ping, usageToday, MESSAGES, DEFAULT_MODEL, buildBody, mapHttpError, extract, parseJson };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = AIService;

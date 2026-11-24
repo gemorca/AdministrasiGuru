@@ -161,7 +161,7 @@
                 for (let i = 0; i < rows.length; i += AITasks.followup.BATCH) {
                     const batch = rows.slice(i, i + AITasks.followup.BATCH);
                     const t = AITasks.followup.build({ rows: batch, kktp, ctx });
-                    const r = await AIService.generate({ task: 'tindaklanjut', ...t, signal, pii });
+                    const r = await AIService.generate({ task: 'tindaklanjut', ...t, terse: true, signal, pii });
                     out.push(...r.data.rekomendasi);
                 }
                 return out;
