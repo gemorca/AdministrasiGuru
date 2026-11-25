@@ -155,6 +155,7 @@
         }
 
         function updateHeader() {
+            if (typeof renderBackupReminder === 'function') renderBackupReminder();
             let elSchool = document.getElementById('headerSchool');
             if (elSchool) elSchool.innerText = settings.school;
             let elInfo = document.getElementById('headerInfo');
@@ -217,7 +218,7 @@
                 }
             }
             if (viewId === 'generator') renderGeneratorTab();
-            if (viewId === 'bank-soal') renderBankSoal();
+            if (viewId === 'bank-soal') { renderBankSoal(); renderPaket(); }
             if (viewId === 'attendance') { renderAttInput(); renderMtgHistory(); }
             if (viewId === 'recap-attendance') renderRecapAtt();
             if (viewId === 'scores') renderRecapScores();

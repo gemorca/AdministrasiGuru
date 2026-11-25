@@ -10,8 +10,8 @@ Buka `index.html` langsung di browser (tidak perlu server). Perilaku semua menu 
 - `apps-script/`: `Code.gs` (proxy Gemini) dan `PANDUAN.md` (langkah pasang).
 - `js/app/`: `state.js`, `ui.js`, `app.js` (navigasi, init), `boot.js` (titik masuk).
 - `js/modules/`: satu berkas per menu.
-- `tests/unit/`: 117 uji unit. Jalankan `node --test tests/unit/*.test.js`.
-- `tests/run_tests.py`: 198 uji browser tanpa file asli (termasuk menjalankan uji unit; uji paritas tambahan bila file asli diberikan). Jalankan `python3 tests/run_tests.py [file_asli.html]`. Butuh `pip install playwright` dan Chromium. Argumen opsional = file asli untuk uji paritas.
+- `tests/unit/`: 129 uji unit. Jalankan `node --test tests/unit/*.test.js`.
+- `tests/run_tests.py`: 250 uji browser tanpa file asli (termasuk menjalankan uji unit; uji paritas tambahan bila file asli diberikan). Jalankan `python3 tests/run_tests.py [file_asli.html]`. Butuh `pip install playwright` dan Chromium. Argumen opsional = file asli untuk uji paritas.
 - `tools/build_from_original.py`: skrip yang menghasilkan proyek ini dari file asli (untuk jejak audit).
 
 ## Aturan pengembangan
@@ -63,3 +63,10 @@ Buka `index.html` langsung di browser (tidak perlu server). Perilaku semua menu 
 - Validasi lokal: kode lengkap dan tidak ganda, tanpa kode siswa lain, konsisten dengan status (siswa belum tuntas tidak boleh "tuntas", sebaliknya; nilai belum lengkap tidak boleh keduanya), tanpa istilah diagnosis, tanpa tautan; surat wajib berawal "Dengan hormat,", tanpa nomor/tanda tangan/tanggal/jam karangan. Satu perbaikan otomatis bila gagal.
 - Tabel rapor per TP kini memakai rata-rata nilai asesmen yang dikaitkan ke TP itu (bukan nilai akhir yang sama). Narasi bawaan palsu dihapus.
 - Uji browser tidak lagi membaca `app-config.js` asli (dicegat dan dikosongkan) agar URL/token nyata tidak mengubah hasil uji.
+
+## Penguatan (Tahap 6, sebagian)
+- **Backup v2**: berversi, mode gabung/timpa, pengingat 7 hari, backup lama tetap bisa dipulihkan.
+- **Penyimpanan**: IndexedDB (cadangan localStorage). Data lama diimpor otomatis sekali. `await Store.init()` wajib sebelum `initApp`.
+- **Paket asesmen**: Bank Soal > Paket Asesmen. Naskah dan kunci dicetak terpisah.
+- **Vendor offline**: jalankan `sh tools/fetch_vendor.sh` sekali (perlu internet).
+- **Lintas browser**: `BROWSER=firefox python3 tests/run_tests.py` (setelah `playwright install firefox webkit`).

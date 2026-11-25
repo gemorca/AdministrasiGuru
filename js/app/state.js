@@ -16,6 +16,7 @@
             wUts: 20,
             wUas: 20,
             ...Grading.DEFAULTS,
+            printAiMark: true,
             ai: {
                 enabled: false, mode: 'proxy', proxyUrl: '', model: 'gemini-3.6-flash', fallbackModel: '',
                 style: 'auto', styleResolved: null, privacyAckAt: null, allowNames: false,

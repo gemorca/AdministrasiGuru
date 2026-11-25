@@ -35,7 +35,7 @@ tests/      run_tests.py (browser) dan unit/*.test.js
 ```
 
 Aturan:
-1. Semua penyimpanan lewat `Store` (bukan `localStorage` langsung). Rahasia lewat `Store.secretGet/Set/Clear` (kunci `g_ai_secret`, tidak masuk backup).
+1. Semua penyimpanan lewat `Store` (bukan `localStorage` langsung; fisik = IndexedDB, cadangan localStorage; `boot.js` memanggil `await Store.init()` lebih dulu). Rahasia lewat `Store.secretGet/Set/Clear` (kunci `g_ai_secret`, tidak masuk backup).
 2. ID baru: `genId('PREFIX')` (UUID). Setiap record punya `createdAt`, `updatedAt`, `ownerId` (null, disiapkan untuk login).
 3. Data pengguna atau keluaran AI yang masuk HTML wajib `esc(...)`. HTML dari penyimpanan/backup lewat `sanitizeHtml`.
 4. Hapus data induk lewat `Integrity.cascade*`; `Integrity.audit()` harus kosong.
@@ -65,10 +65,10 @@ Aturan:
 | 4 | Proyek P5, Modul P5, Tugas/LKPD (rubrik total 100%), tafsiran analisis ulangan, rekomendasi remedial/pengayaan | Selesai |
 | Tambahan | Konfigurasi bersama `app-config.js`, dropdown model + muat daftar dari Gemini, gaya ringkas terbatas, token per tugas | Selesai |
 | 5 | Narasi rapor, laporan wali, isi surat memakai Gemini; tabel rapor per TP nyata; `HIDE_WHEN_OFF = true`; simulasi dihapus (bagian 6) | Selesai |
-| 6 | Penguatan (bagian 7) | **Berikutnya** |
+| 6 | Penguatan (bagian 7): backup v2, IndexedDB, paket asesmen + cetak kunci, penanda AI, skrip vendor selesai; sisa: salin vendor, uji lintas browser, ekspor docx/PDF, kop cetak seragam | **Sebagian** |
 | 7 | Login dan multi-guru (bagian 8) | Belum |
 
-Pengujian terakhir: **117 uji unit** dan **198 uji browser** (tanpa file asli) lulus. Jalankan:
+Pengujian terakhir: **129 uji unit** dan **250 uji browser** (tanpa file asli) lulus. Jalankan:
 ```
 node --test tests/unit/*.test.js
 python3 tests/run_tests.py [path/ke/file_asli.html]
@@ -85,14 +85,21 @@ Dulu simulasi (kini tersambung ke Gemini): `generateAllNarration` (rapor.js), `g
 - Perbaiki di rapor: tabel per-TP saat ini menampilkan nilai akhir yang sama untuk tiap TP (palsu); ganti dengan data nyata per asesmen berkait TP atau hapus kolom.
 - Tambah uji pola yang sama (build/validate unit; browser: draf -> setuju -> simpan, nol permintaan bila AI belum siap, tanpa nama/NIS di permintaan, XSS pada keluaran AI).
 
-## 7. Tahap 6: penguatan (berikutnya)
+## 7. Tahap 6: penguatan (sebagian selesai)
 
-- Migrasi `Store` ke IndexedDB (batas localStorage ±5 MB; sekarang hanya ada peringatan 80%). Antarmuka `Store` sudah memisahkan penyimpanan fisik.
-- Backup v2: berversi skema, mode gabung/timpa saat restore, pengingat 7 hari. Backup lama tetap harus bisa dipulihkan.
-- Salin Tailwind dan Chart.js ke `vendor/` (loader sudah ada; berkas belum disalin), idealnya build Tailwind CLI.
-- Antarmuka penyusunan paket asesmen (`allAssessmentPkgs`, FR-31) dan cetak paket beserta kunci.
-- Format cetak laporan/kop konsisten; uji lintas browser; ekspor `.docx`/PDF sungguhan bila dibutuhkan.
-- Penanda "Dibuat dengan AI" yang dapat dimatikan pada hasil cetak.
+Selesai:
+- **Backup v2** (`js/domain/backup.js`, `js/modules/backup.js`): `schemaVersion` 2 + `counts` per tabel; `parse` menolak JSON rusak, aplikasi lain, skema lebih baru, tabel rusak/tidak lengkap; backup lama (tanpa schemaVersion) tetap bisa dipulihkan; restore mode **Gabung** (bawaan, per record, ganti hanya bila `updatedAt` lebih baru, tidak menghapus) atau **Timpa** (salinan data saat ini diunduh otomatis lebih dulu); pengingat 7 hari (`settings.lastBackupAt`, banner di Dashboard dan Backup).
+- **IndexedDB** (`js/core/store.js`): memori + penulisan latar ke IndexedDB, antarmuka `read/write` tetap sinkron; impor sekali dari localStorage lalu diverifikasi baru dihapus; gagal buka -> otomatis localStorage; `Store.flush()`; rahasia AI tetap di localStorage. `APP_CONFIG.storage = 'local'` memaksa localStorage (dipakai uji lama; uji IndexedDB memakai `'indexeddb'`). Batas kuota kini kuota browser, bukan 5 MB.
+- **Paket asesmen** (`js/domain/package.js`, `js/modules/paket.js`, bagian Bank Soal): buat/ubah/hapus, naskah tanpa kunci, kunci + skor (bobot sama, total 100) + peringatan butir tanpa kunci, cetak terpisah; paket lama (tanpa jenis/kelas/durasi) tetap tampil; hapus butir mencabutnya dari paket (`Integrity.cascadeQuestion`), hapus kelas ikut menghapus paket, audit mengecek paket.
+- **Catatan "dibuat dengan AI"** pada cetakan paket bila ada butir AI; dapat dimatikan (`settings.printAiMark`).
+- `tools/fetch_vendor.sh` (unduh Tailwind dan Chart.js ke `vendor/`), uji lintas browser lewat `BROWSER=firefox python3 tests/run_tests.py`.
+
+Belum (perlu internet/keputusan pengguna):
+- Jalankan `sh tools/fetch_vendor.sh` di komputer berinternet (sandbox tanpa jaringan; `vendor/` belum ada). Idealnya build Tailwind CLI.
+- Uji Firefox/WebKit belum dijalankan (hanya Chromium terpasang di sandbox).
+- Ekspor `.docx`/PDF sungguhan (tunggu keputusan; saat ini `.doc` via HTML dan cetak browser).
+- Kop dan format cetak laporan/rapor/surat belum diseragamkan; catatan AI belum ada di cetak rapor/surat.
+- Beberapa tab terbuka memakai salinan memori masing-masing (tulis terakhir menang), sama seperti sebelumnya.
 
 ## 8. Tahap 7: login dan multi-guru (terakhir)
 

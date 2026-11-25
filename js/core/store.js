@@ -7,8 +7,12 @@
  *  - migrasi skema bertahap dengan snapshot cadangan sebelum mengubah data.
  *  - perkiraan pemakaian penyimpanan.
  *
- * Penyimpanan fisik sengaja masih localStorage. Pindah ke IndexedDB (Tahap 6)
- * cukup mengganti isi file ini.
+ * Penyimpanan fisik (Tahap 6): IndexedDB bila tersedia, dengan salinan di memori sehingga antarmuka
+ * read/write tetap sinkron. Penulisan ke IndexedDB berjalan di latar (lihat flush()). Data lama di
+ * localStorage diimpor sekali, diverifikasi, baru dihapus dari localStorage. Bila IndexedDB tidak
+ * tersedia atau gagal dibuka, otomatis kembali ke localStorage (perilaku lama, batas ±5 MB).
+ * Rahasia AI tetap di localStorage (kecil, terpisah dari data dan backup).
+ * Panggil `await Store.init()` sekali sebelum memakai read/write.
  */
 const Store = (() => {
     const SCHEMA_KEY = 'g_schema';
@@ -32,6 +36,117 @@ const Store = (() => {
 
     const clone = v => JSON.parse(JSON.stringify(v));
     const nowIso = () => new Date().toISOString();
+
+    // ---------- Lapisan fisik ----------
+    // mode 'local'  : localStorage langsung.
+    // mode 'idb'    : Map di memori (sumber baca) + penulisan ke IndexedDB di latar.
+    const IDB_NAME = 'sistem_admin_guru', IDB_STORE = 'kv';
+    const NON_DATA = new Set(['g_ai_secret', 'g_ai_usage']); // tetap di localStorage
+    let mode = 'local';
+    let db = null;
+    const mem = new Map();
+    let pending = 0, idleWaiters = [], idbQuota = null, initInfo = { mode: 'local', imported: 0, note: '' };
+
+    function trackStart() { pending++; }
+    function trackEnd() { pending--; if (pending <= 0) { pending = 0; const w = idleWaiters; idleWaiters = []; w.forEach(f => f()); } }
+    /** Menunggu semua penulisan latar ke IndexedDB selesai (mode local: langsung). */
+    function flush() { return pending === 0 ? Promise.resolve() : new Promise(res => idleWaiters.push(res)); }
+
+    function idbPut(key, value) {
+        trackStart();
+        try {
+            const tx = db.transaction(IDB_STORE, 'readwrite');
+            tx.objectStore(IDB_STORE).put(value, key);
+            tx.oncomplete = trackEnd;
+            tx.onabort = tx.onerror = () => { trackEnd(); reportError('Data gagal disimpan ke penyimpanan browser (IndexedDB). Lakukan Backup lalu muat ulang halaman.'); };
+        } catch (e) { trackEnd(); reportError('Data gagal disimpan ke penyimpanan browser (IndexedDB): ' + (e && e.message ? e.message : e)); }
+    }
+    function idbDelete(key) {
+        trackStart();
+        try {
+            const tx = db.transaction(IDB_STORE, 'readwrite');
+            tx.objectStore(IDB_STORE).delete(key);
+            tx.oncomplete = trackEnd; tx.onabort = tx.onerror = trackEnd;
+        } catch (e) { trackEnd(); }
+    }
+
+    function rawGet(k) { if (mode === 'idb' && !NON_DATA.has(k)) return mem.has(k) ? mem.get(k) : null; return localStorage.getItem(k); }
+    function rawSet(k, v) { if (mode === 'idb' && !NON_DATA.has(k)) { mem.set(k, v); idbPut(k, v); return; } localStorage.setItem(k, v); }
+    function rawRemove(k) { if (mode === 'idb' && !NON_DATA.has(k)) { mem.delete(k); idbDelete(k); return; } localStorage.removeItem(k); }
+    function rawKeys() {
+        if (mode === 'idb') return Array.from(mem.keys());
+        const out = []; try { for (let i = 0; i < localStorage.length; i++) out.push(localStorage.key(i)); } catch (_) {}
+        return out;
+    }
+
+    function openDb() {
+        return new Promise((resolve, reject) => {
+            const req = indexedDB.open(IDB_NAME, 1);
+            req.onupgradeneeded = () => { req.result.createObjectStore(IDB_STORE); };
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error || new Error('IndexedDB gagal dibuka'));
+            req.onblocked = () => reject(new Error('IndexedDB terblokir'));
+        });
+    }
+    function loadAll(d) {
+        return new Promise((resolve, reject) => {
+            const out = new Map();
+            const tx = d.transaction(IDB_STORE, 'readonly');
+            const req = tx.objectStore(IDB_STORE).openCursor();
+            req.onsuccess = () => { const c = req.result; if (c) { out.set(c.key, c.value); c.continue(); } };
+            tx.oncomplete = () => resolve(out);
+            tx.onerror = tx.onabort = () => reject(tx.error || new Error('Gagal membaca IndexedDB'));
+        });
+    }
+    function putMany(d, entries) {
+        return new Promise((resolve, reject) => {
+            const tx = d.transaction(IDB_STORE, 'readwrite'); const st = tx.objectStore(IDB_STORE);
+            entries.forEach(([k, v]) => st.put(v, k));
+            tx.oncomplete = () => resolve(); tx.onerror = tx.onabort = () => reject(tx.error || new Error('Gagal menulis IndexedDB'));
+        });
+    }
+
+    /**
+     * Pilih dan siapkan penyimpanan. opts.mode: 'local' memaksa localStorage; selain itu IndexedDB bila ada.
+     * Mengembalikan { mode, imported, note }. Tidak pernah melempar: kegagalan -> kembali ke localStorage.
+     */
+    async function init(opts) {
+        const want = (opts && opts.mode) || 'indexeddb';
+        if (want === 'local' || typeof indexedDB === 'undefined') { mode = 'local'; initInfo = { mode, imported: 0, note: want === 'local' ? '' : 'IndexedDB tidak tersedia; memakai localStorage.' }; return initInfo; }
+        try {
+            const d = await openDb();
+            const stored = await loadAll(d);
+            let imported = 0, note = '';
+            if (stored.size === 0) {
+                // Impor satu kali dari localStorage (pengguna lama). Hanya kunci data aplikasi.
+                const entries = [];
+                try {
+                    for (let i = 0; i < localStorage.length; i++) {
+                        const k = localStorage.key(i);
+                        if (k && k.startsWith('g_') && !NON_DATA.has(k)) entries.push([k, localStorage.getItem(k)]);
+                    }
+                } catch (_) {}
+                if (entries.length) {
+                    await putMany(d, entries);
+                    const back = await loadAll(d);                           // verifikasi baca ulang
+                    const okAll = entries.every(([k, v]) => back.get(k) === v);
+                    if (!okAll) throw new Error('Verifikasi impor gagal');
+                    entries.forEach(([k, v]) => stored.set(k, v));
+                    entries.forEach(([k]) => { try { localStorage.removeItem(k); } catch (_) {} });  // hapus lama hanya setelah terverifikasi
+                    imported = entries.length;
+                    note = `Data dipindahkan ke penyimpanan IndexedDB (${imported} kunci).`;
+                }
+            }
+            db = d; mem.clear(); stored.forEach((v, k) => mem.set(k, v));
+            mode = 'idb';
+            try { if (navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(e => { if (e && e.quota) idbQuota = e.quota; }).catch(() => {}); } catch (_) {}
+            initInfo = { mode, imported, note };
+        } catch (e) {
+            mode = 'local'; db = null; mem.clear();
+            initInfo = { mode, imported: 0, note: 'IndexedDB tidak dapat dipakai (' + (e && e.message ? e.message : e) + '); memakai localStorage. Data Anda aman.' };
+        }
+        return initInfo;
+    }
 
     // Kunci identitas record berbeda per tabel (TP punya cpId DAN tpId, nilai harian tidak punya id).
     const ID_FIELD = { g_cp: 'cpId', g_tp: 'tpId', g_cls: 'classId' };
@@ -59,7 +174,7 @@ const Store = (() => {
     /** Baca satu kunci. Data rusak disalin ke g_corrupt_* lalu fallback dikembalikan. */
     function read(key, fallback) {
         let raw = null;
-        try { raw = localStorage.getItem(key); } catch (e) { reportError('Penyimpanan browser tidak dapat dibaca.'); return clone(fallback); }
+        try { raw = rawGet(key); } catch (e) { reportError('Penyimpanan browser tidak dapat dibaca.'); return clone(fallback); }
         if (raw === null) {
             sigCache[key] = {};
             return clone(fallback);
@@ -73,7 +188,7 @@ const Store = (() => {
             }
             return v;
         } catch (e) {
-            try { localStorage.setItem(`g_corrupt_${key}_${Date.now()}`, raw); } catch (_) { /* kuota penuh: abaikan */ }
+            try { rawSet(`g_corrupt_${key}_${Date.now()}`, raw); } catch (_) { /* kuota penuh: abaikan */ }
             reportError(`Data "${key}" rusak dan tidak bisa dibaca. Salinan mentah disimpan dengan awalan g_corrupt_.`);
             sigCache[key] = {};
             return clone(fallback);
@@ -101,7 +216,7 @@ const Store = (() => {
             }
         }
         try {
-            localStorage.setItem(key, JSON.stringify(value));
+            rawSet(key, JSON.stringify(value));
             return true;
         } catch (e) {
             reportError(isQuotaError(e)
@@ -111,7 +226,7 @@ const Store = (() => {
         }
     }
 
-    function remove(key) { try { localStorage.removeItem(key); } catch (_) {} }
+    function remove(key) { try { rawRemove(key); } catch (_) {} }
 
     // Rahasia (API key / token proxy AI). Kunci terpisah, TIDAK termasuk DATA_KEYS:
     // tidak ikut backup, tidak ikut snapshot migrasi, tidak terhapus oleh restore.
@@ -123,17 +238,13 @@ const Store = (() => {
     }
     function secretClear() { remove(SECRET_KEY); }
 
-    /** Perkiraan pemakaian: UTF-16, 2 byte per karakter. */
+    /** Perkiraan pemakaian. local: UTF-16 2 byte/karakter vs batas ±5 MB. idb: ukuran data vs kuota browser (bila diketahui). */
     function usage() {
         let chars = 0;
-        try {
-            for (let i = 0; i < localStorage.length; i++) {
-                const k = localStorage.key(i);
-                chars += k.length + (localStorage.getItem(k) || '').length;
-            }
-        } catch (_) {}
+        try { for (const k of rawKeys()) chars += k.length + (rawGet(k) || '').length; } catch (_) {}
         const bytes = chars * 2;
-        return { bytes, quota: QUOTA_BYTES, ratio: bytes / QUOTA_BYTES };
+        const quota = mode === 'idb' ? (idbQuota || 0) : QUOTA_BYTES;
+        return { bytes, quota, ratio: quota ? bytes / quota : 0, backend: mode };
     }
 
     function timeFromLegacyId(id) {
@@ -149,7 +260,7 @@ const Store = (() => {
      */
     function migrate() {
         let current = 0;
-        try { current = parseInt(localStorage.getItem(SCHEMA_KEY) || '0', 10) || 0; } catch (_) {}
+        try { current = parseInt(rawGet(SCHEMA_KEY) || '0', 10) || 0; } catch (_) {}
         const result = { from: current, to: SCHEMA_VERSION, migrated: false, records: 0, backup: 'none' };
         if (current >= SCHEMA_VERSION) return result;
 
@@ -157,13 +268,13 @@ const Store = (() => {
         const snap = {};
         let hasData = false;
         for (const k of DATA_KEYS) {
-            const raw = localStorage.getItem(k);
+            const raw = rawGet(k);
             if (raw !== null) { snap[k] = raw; hasData = true; }
         }
         if (hasData) {
             try {
-                localStorage.setItem(BACKUP_KEY, JSON.stringify({ takenAt: nowIso(), fromSchema: current, data: snap }));
-                result.backup = 'localStorage';
+                rawSet(BACKUP_KEY, JSON.stringify({ takenAt: nowIso(), fromSchema: current, data: snap }));
+                result.backup = mode === 'idb' ? 'indexeddb' : 'localStorage';
             } catch (e) {
                 result.backup = 'failed';
                 reportError('Cadangan otomatis sebelum pembaruan data tidak muat di penyimpanan. Pembaruan tetap aman (hanya menambah metadata), tetapi disarankan menekan Backup JSON sekarang.');
@@ -187,18 +298,19 @@ const Store = (() => {
                 result.records++;
             }
             if (changed) {
-                try { localStorage.setItem(k, JSON.stringify(arr)); }
+                try { rawSet(k, JSON.stringify(arr)); }
                 catch (e) { reportError('Pembaruan data gagal pada "' + k + '". Penyimpanan penuh.'); return result; }
             }
         }
 
-        try { localStorage.setItem(SCHEMA_KEY, String(SCHEMA_VERSION)); } catch (_) {}
+        try { rawSet(SCHEMA_KEY, String(SCHEMA_VERSION)); } catch (_) {}
         result.migrated = true;
         return result;
     }
 
     return {
-        read, write, remove, usage, migrate, secretGet, secretSet, secretClear,
+        init, flush, read, write, remove, usage, migrate, secretGet, secretSet, secretClear,
+        get backend() { return mode; }, get initInfo() { return initInfo; },
         DATA_KEYS, LIST_KEYS, SCHEMA_VERSION, BACKUP_KEY,
         set onError(fn) { errorHandler = fn; }
     };

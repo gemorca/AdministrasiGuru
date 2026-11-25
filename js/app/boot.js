@@ -1,17 +1,20 @@
 /**
  * Titik masuk aplikasi.
- * Menghubungkan galat penyimpanan ke modal, menjalankan initApp, lalu memeriksa kuota.
+ * Menyiapkan penyimpanan (IndexedDB atau localStorage), menghubungkan galat penyimpanan ke modal,
+ * menjalankan initApp, lalu memeriksa kuota.
  */
-window.onload = function () {
+window.onload = async function () {
     Store.onError = function (msg) { showModal('Peringatan Penyimpanan', msg, '\u26A0\uFE0F'); };
+    const info = await Store.init({ mode: (window.APP_CONFIG && window.APP_CONFIG.storage) || 'indexeddb' });
     initApp();
     AIUI.init();
     AIUI.applyVisibility();
+    if (info.note) showModal('Penyimpanan', info.note, info.mode === 'idb' ? '\u2705' : '\u26A0\uFE0F');
     const u = Store.usage();
     if (u.ratio >= 0.8) {
         const mb = (u.bytes / 1048576).toFixed(1);
         showModal('Penyimpanan Hampir Penuh',
-            'Pemakaian penyimpanan browser sekitar ' + mb + ' MB dari perkiraan batas 5 MB. ' +
+            'Pemakaian penyimpanan browser sekitar ' + mb + ' MB dari batas ' + (u.quota / 1048576).toFixed(0) + ' MB. ' +
             'Lakukan Backup JSON dan hapus data periode lama agar data baru tetap bisa disimpan.', '\u26A0\uFE0F');
     }
 };

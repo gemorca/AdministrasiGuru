@@ -202,11 +202,12 @@
         }
 
         function deleteQuestion(id) {
-            showConfirm("Apakah Anda yakin ingin menghapus soal ini?", () => {
-                allQuestions = allQuestions.filter(q => q.id !== id);
+            showConfirm("Apakah Anda yakin ingin menghapus soal ini?" + Integrity.describe(Integrity.questionDeps(id)), () => {
+                Integrity.cascadeQuestion(id);
                 saveAllData();
                 loadActiveContextData();
                 renderBankSoal();
+                if (typeof renderPaket === 'function') renderPaket();
             });
         }
 

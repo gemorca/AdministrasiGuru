@@ -78,7 +78,8 @@ const Integrity = (() => {
             { label: 'komunikasi', n: allCommunications.filter(c => c.classId === classId || stu.has(c.studentId)).length },
             { label: 'surat', n: allDocuments.filter(d => d.classId === classId || stu.has(d.studentId)).length },
             { label: 'tindak lanjut', n: allFollowUps.filter(f => f.classId === classId || stu.has(f.studentId)).length },
-            { label: 'modul ajar tersimpan', n: allMaterials.filter(m => m.classId === classId).length }
+            { label: 'modul ajar tersimpan', n: allMaterials.filter(m => m.classId === classId).length },
+            { label: 'paket asesmen', n: allAssessmentPkgs.filter(p => p.classId === classId).length }
         ];
     }
     function cascadeClass(classId) {
@@ -101,8 +102,20 @@ const Integrity = (() => {
         allDocuments = allDocuments.filter(d => d.classId !== classId);
         allFollowUps = allFollowUps.filter(f => f.classId !== classId);
         allMaterials = allMaterials.filter(m => m.classId !== classId);
+        allAssessmentPkgs = allAssessmentPkgs.filter(p => p.classId !== classId);
         allSchedules = allSchedules.filter(s => s.classId !== classId);
         classes = classes.filter(c => c.classId !== classId);
+    }
+
+    // ---------- Butir Bank Soal (dipakai paket asesmen) ----------
+    function questionDeps(id) {
+        return [{ label: 'paket asesmen memuat soal ini', n: allAssessmentPkgs.filter(p => (p.questionIds || []).includes(id)).length }];
+    }
+    /** Hapus butir; id-nya dicabut dari semua paket. Paket yang menjadi kosong ikut dihapus. */
+    function cascadeQuestion(id) {
+        allQuestions = allQuestions.filter(q => q.id !== id);
+        allAssessmentPkgs.forEach(p => { p.questionIds = (p.questionIds || []).filter(x => x !== id); });
+        allAssessmentPkgs = allAssessmentPkgs.filter(p => (p.questionIds || []).length > 0);
     }
 
     // ---------- CP / TP (referensi lemah: dilepas, bukan dihapus) ----------
@@ -158,6 +171,9 @@ const Integrity = (() => {
         chk('asesmen tanpa kelas', allAssessments, a => a.classId && !cls.has(a.classId));
         chk('modul ajar tanpa kelas', allMaterials, m => m.classId && !cls.has(m.classId));
         chk('tindak lanjut tanpa siswa', allFollowUps, f => f.studentId && !stu.has(f.studentId));
+        const qst = ids(allQuestions.map(q => q.id));
+        chk('paket asesmen tanpa kelas', allAssessmentPkgs, p => p.classId && !cls.has(p.classId));
+        chk('paket asesmen memuat soal yang hilang', allAssessmentPkgs, p => (p.questionIds || []).some(x => !qst.has(x)));
         return out;
     }
 
@@ -167,6 +183,7 @@ const Integrity = (() => {
         guardianDeps, cascadeGuardian,
         classDeps, cascadeClass,
         cpDeps, cascadeCp,
+        questionDeps, cascadeQuestion,
         audit
     };
 })();

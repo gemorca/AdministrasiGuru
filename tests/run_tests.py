@@ -9,7 +9,7 @@ Argumen opsional = file HTML asli. Jika ada, dijalankan juga uji paritas (tampil
 harus sama dengan file asli) dan uji pembanding XSS (file asli harus gagal, versi baru lulus).
 CDN Tailwind/Chart.js dicegat: Tailwind dikosongkan, Chart.js diganti stub kecil.
 """
-import json, sys, pathlib, re, copy, tempfile
+import json, sys, os, pathlib, re, copy, tempfile
 from playwright.sync_api import sync_playwright
 
 import threading, functools, http.server, socketserver
@@ -121,7 +121,7 @@ def new_ctx(browser):
         u = r.request.url
         if 'cdn.tailwindcss.com' in u: return r.fulfill(status=200, content_type='application/javascript', body='')
         if 'cdn.jsdelivr.net' in u: return r.fulfill(status=200, content_type='application/javascript', body=STUB_CHART)
-        if u.split('?')[0].endswith('/app-config.js'): return r.fulfill(status=200, content_type='application/javascript', body='window.APP_CONFIG = window.APP_CONFIG || {};')  # uji tidak boleh bergantung pada URL/token asli
+        if u.split('?')[0].endswith('/app-config.js'): return r.fulfill(status=200, content_type='application/javascript', body="window.APP_CONFIG = window.APP_CONFIG || {}; window.APP_CONFIG.storage = window.APP_CONFIG.storage || 'local';")  # uji tidak bergantung pada URL/token asli; penyimpanan bawaan uji = localStorage
         if u.startswith('file://') or u.startswith('http://127.0.0.1'): return r.continue_()
         return r.abort()
     ctx.route('**/*', route)
@@ -1238,9 +1238,263 @@ def run_tahap5(br):
     ctx.close()
 
 
+# ------------------------------------------------------------------ Tahap 6a: backup v2
+def run_tahap6_backup(br):
+    tmp = pathlib.Path(tempfile.mkdtemp())
+    # --- B1 format v2 + penanda backup terakhir
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed())
+    with page.expect_download() as dl: page.evaluate("backupJSON()")
+    path = dl.value.path(); d = json.loads(pathlib.Path(path).read_text(encoding='utf8'))
+    check('B1a backup v2: schemaVersion 2, counts per tabel cocok dengan isi, nama berkas v2', d['schemaVersion'] == 2 and d['counts']['students'] == len(d['students']) == 6 and d['counts']['scores'] == len(d['scores']) and 'v2' in dl.value.suggested_filename, (d.get('schemaVersion'), dl.value.suggested_filename))
+    check('B1b backup mencatat lastBackupAt di pengaturan', page.evaluate("!!settings.lastBackupAt && !!JSON.parse(localStorage.getItem('g_set')).lastBackupAt"))
+    ctx.close()
+
+    # --- B2 pengingat 7 hari
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed())
+    vis = lambda: page.evaluate("[...document.querySelectorAll('#view-dashboard .backup-reminder')].every(e=>!e.classList.contains('hidden'))")
+    check('B2a belum pernah backup dan data ada: pengingat tampil di dashboard', vis() and 'belum pernah' in page.evaluate("document.querySelector('#view-dashboard [data-reminder-text]').innerText"))
+    page.evaluate("settings.lastBackupAt = new Date(Date.now()-8*86400000).toISOString(); renderBackupReminder()")
+    check('B2b backup 8 hari lalu: pengingat tampil dengan jumlah hari', vis() and '8 hari' in page.evaluate("document.querySelector('#view-dashboard [data-reminder-text]').innerText"))
+    page.evaluate("settings.lastBackupAt = new Date(Date.now()-2*86400000).toISOString(); renderBackupReminder()")
+    check('B2c backup 2 hari lalu: pengingat tersembunyi', not vis())
+    ctx.close()
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, {})
+    check('B2d tanpa data dan belum backup: pengingat tidak mengganggu', page.evaluate("[...document.querySelectorAll('.backup-reminder')].every(e=>e.classList.contains('hidden'))"))
+    ctx.close()
+
+    # --- B3 mode gabung
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed())
+    with page.expect_download() as dl: page.evaluate("backupJSON()")
+    bk = dl.value.path()
+    page.evaluate("""()=>{ const s=allStudents.find(x=>x.name==='Siti Aminah'); s.name='Siti EDIT BARU'; s.updatedAt='2099-01-01T00:00:00.000Z';
+        allStudents.push({id:'STU-BARU', periodId: activePeriodId, classId: activeClassId, nis:'9999', name:'Siswa Baru', gender:'L', class:'VII.1'});
+        allStudents = allStudents.filter(x=>x.name!=='Fajar'); Store.write('g_stu', allStudents); loadActiveContextData(); }""")
+    page.evaluate("document.getElementById('restoreMode').value='gabung'")
+    goto_view(page, 'Backup'); page.set_input_files('#fileRestore', bk); page.evaluate("restoreJSON()"); page.wait_for_timeout(200)
+    check('B3a gabung meminta konfirmasi yang menjelaskan mode gabung', 'GABUNG' in page.evaluate("document.getElementById('confirmMessage').innerText"))
+    page.evaluate("executeConfirm()"); page.wait_for_timeout(200)
+    names = page.evaluate("allStudents.map(s=>s.name)")
+    check('B3b gabung: edit yang lebih baru dipertahankan, siswa baru tetap ada, siswa yang terhapus dikembalikan', 'Siti EDIT BARU' in names and 'Siswa Baru' in names and 'Fajar' in names and 'Siti Aminah' not in names, names)
+    check('B3c gabung: hasil tersimpan permanen dan pesan ringkasan memuat jumlah', len(json.loads(page.evaluate("localStorage.getItem('g_stu')"))) == 7 and 'ditambah' in modal_text(page), modal_text(page))
+    check('B3d gabung: pengaturan saat ini tidak ditimpa dan hanya satu periode aktif', page.evaluate("periods.filter(p=>p.isActive).length") == 1 and page.evaluate("Integrity.audit().length") == 0)
+    ctx.close()
+
+    # --- B4 mode timpa: salinan otomatis lebih dulu
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed())
+    with page.expect_download() as dl: page.evaluate("backupJSON()")
+    bk = dl.value.path()
+    page.evaluate("""()=>{ allStudents = allStudents.filter(x=>x.name!=='Fajar'); allStudents.push({id:'STU-BARU', periodId: activePeriodId, classId: activeClassId, nis:'9999', name:'Siswa Baru', gender:'L', class:'VII.1'}); Store.write('g_stu', allStudents); }""")
+    goto_view(page, 'Backup'); page.select_option('#restoreMode', 'timpa'); page.set_input_files('#fileRestore', bk); page.evaluate("restoreJSON()"); page.wait_for_timeout(200)
+    check('B4a timpa meminta konfirmasi dan menyebut salinan otomatis', 'TIMPA' in page.evaluate("document.getElementById('confirmMessage').innerText") and 'diunduh otomatis' in page.evaluate("document.getElementById('confirmMessage').innerText"))
+    with page.expect_download() as dl2: page.evaluate("executeConfirm()")
+    auto = json.loads(pathlib.Path(dl2.value.path()).read_text(encoding='utf8'))
+    names = page.evaluate("allStudents.map(s=>s.name)")
+    check('B4b timpa: salinan otomatis memuat data SEBELUM ditimpa (Siswa Baru), nama berkas bertanda sebelum-restore', any(x['name'] == 'Siswa Baru' for x in auto['students']) and 'sebelum-restore' in dl2.value.suggested_filename)
+    check('B4c timpa: data persis seperti berkas (Siswa Baru hilang, Fajar kembali)', 'Siswa Baru' not in names and 'Fajar' in names and len(names) == 6, names)
+    ctx.close()
+
+    # --- B5 backup lama (tanpa schemaVersion, sebagian tabel) tetap bisa dipulihkan
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed())
+    legacy = {"appName": "Sistem Administrasi Guru", "backupVersion": "19.0", "createdAt": "2025-01-01T00:00:00.000Z", "settings": {"school": "SMP Lama", "subject": "IPA", "teacher": "G"},
+              "students": [{"id": "STU-OLD", "periodId": PER, "classId": "CLS-VII1", "nis": "7777", "name": "Siswa Lama", "gender": "L", "class": "VII.1"}]}
+    lf = tmp / 'legacy.json'; lf.write_text(json.dumps(legacy), encoding='utf8')
+    goto_view(page, 'Backup'); page.select_option('#restoreMode', 'timpa'); page.set_input_files('#fileRestore', str(lf)); page.evaluate("restoreJSON()"); page.wait_for_timeout(200)
+    check('B5a konfirmasi menandai backup lama (skema 1)', 'backup lama' in page.evaluate("document.getElementById('confirmMessage').innerText"))
+    with page.expect_download(): page.evaluate("executeConfirm()")
+    page.wait_for_timeout(200)
+    r = page.evaluate("({n: allStudents.map(s=>s.name), school: settings.school, per: periods.length, act: periods.some(p=>p.id===activePeriodId), cls: classes.some(c=>c.classId===activeClassId)})")
+    check('B5b backup lama dipulihkan: siswa lama ada, periode dan kelas aktif tetap valid', r['n'] == ['Siswa Lama'] and r['school'] == 'SMP Lama' and r['per'] >= 1 and r['act'] and r['cls'], r)
+    ctx.close()
+
+    # --- B6 berkas rusak, terlalu baru, tidak lengkap: ditolak, data tidak berubah
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed())
+    with page.expect_download() as dl: page.evaluate("backupJSON()")
+    good = json.loads(pathlib.Path(dl.value.path()).read_text(encoding='utf8'))
+    before = page.evaluate("localStorage.getItem('g_stu')")
+    cases = {'rusak.json': '{bukan json', 'baru.json': json.dumps({**good, 'schemaVersion': 9}), 'kurang.json': json.dumps({**good, 'students': good['students'][:-1]}),
+             'lain.json': json.dumps({'appName': 'Lain', 'settings': {}})}
+    outs = {}
+    for nm, txt in cases.items():
+        f = tmp / nm; f.write_text(txt, encoding='utf8')
+        goto_view(page, 'Backup'); page.set_input_files('#fileRestore', str(f)); page.evaluate("restoreJSON()"); page.wait_for_timeout(200)
+        outs[nm] = modal_text(page) + ' || ' + page.evaluate("document.getElementById('modalConfirm').classList.contains('hidden')").__str__()
+        page.evaluate("document.getElementById('customModal').classList.add('hidden')")
+    check('B6a keempat berkas buruk ditolak dengan alasan, tanpa dialog konfirmasi', all('Gagal' in v and v.endswith('True') for v in outs.values()) and 'lebih baru' in outs['baru.json'] and 'tidak lengkap' in outs['kurang.json'] and 'bukan backup' in outs['lain.json'], outs)
+    check('B6b data tidak berubah setelah penolakan', page.evaluate("localStorage.getItem('g_stu')") == before)
+    ctx.close()
+
+
+# ------------------------------------------------------------------ Tahap 6b: penyimpanan IndexedDB
+IDB_CFG = "window.APP_CONFIG = {storage: 'indexeddb'};"
+def idb_keys(page):
+    return page.evaluate("""()=>new Promise((res,rej)=>{const r=indexedDB.open('sistem_admin_guru',1);r.onsuccess=()=>{const tx=r.result.transaction('kv','readonly');const q=tx.objectStore('kv').getAllKeys();q.onsuccess=()=>res(q.result);};r.onerror=()=>rej('x');})""")
+def ls_gkeys(page):
+    return page.evaluate("Object.keys(localStorage).filter(k=>k.startsWith('g_') && k!=='g_ai_secret' && k!=='g_ai_usage')")
+
+def run_tahap6_idb(br):
+    # --- I1 impor sekali dari localStorage lama, terverifikasi, lalu dihapus dari localStorage
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed(), IDB_CFG)
+    page.wait_for_timeout(300)
+    check('I1a mode idb aktif dan data lama diimpor (siswa tampil)', page.evaluate("Store.backend") == 'idb' and page.evaluate("allStudents.length") == 6 and 'IndexedDB' in page.evaluate("Store.initInfo.note"), page.evaluate("Store.initInfo"))
+    keys = idb_keys(page)
+    check('I1b IndexedDB memuat kunci data (g_stu, g_scr, g_set, g_schema) dan localStorage tidak lagi memuat data', {'g_stu', 'g_scr', 'g_set', 'g_schema'} <= set(keys) and ls_gkeys(page) == [], (keys[:8], ls_gkeys(page)))
+    check('I1c perubahan tersimpan lewat IndexedDB dan bertahan setelah muat ulang', True)
+    page.evaluate("()=>{ allStudents.find(s=>s.name==='Fajar').name='Fajar Ubah'; saveAllData(); return Store.flush(); }")
+    page.reload(); page.wait_for_function("typeof initApp==='function' && document.querySelectorAll('#navMenu button').length>0"); page.wait_for_timeout(200)
+    names = page.evaluate("allStudents.map(s=>s.name)")
+    check('I1d setelah muat ulang: edit bertahan, data tidak diimpor ulang, localStorage tetap tanpa data', 'Fajar Ubah' in names and len(names) == 6 and ls_gkeys(page) == [] and page.evaluate("Store.initInfo.imported") == 0, names)
+    check('I1e audit relasi bersih dan semua menu terbuka tanpa galat di mode idb', page.evaluate("Integrity.audit().length") == 0 and (visit_all_views(page) is not None) and not errs, errs[:3])
+    ctx.close()
+
+    # --- I2 melewati batas 5 MB localStorage
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed(), IDB_CFG); page.wait_for_timeout(200)
+    ok = page.evaluate("""async ()=>{ const big='x'.repeat(1024*1024); for(let i=0;i<8;i++){ allJournals.push({id:'JOUR-BIG'+i, periodId: activePeriodId, classId: activeClassId, date:'2026-08-0'+(i+1), topic:'Besar', note:big}); }
+        saveAllData(); await Store.flush(); return Store.usage(); }""")
+    check('I2a menyimpan ±16 MB data (di atas batas localStorage) berhasil tanpa pesan galat, rasio kuota tidak memicu peringatan 80%', ok['bytes'] > 10 * 1048576 and ok['backend'] == 'idb' and ok['ratio'] < 0.8 and 'Peringatan' not in modal_text(page) and 'Penuh' not in modal_text(page), (ok, modal_text(page)))
+    page.reload(); page.wait_for_function("typeof initApp==='function' && document.querySelectorAll('#navMenu button').length>0"); page.wait_for_timeout(300)
+    check('I2b data besar bertahan setelah muat ulang dan tidak ada peringatan penyimpanan penuh', page.evaluate("allJournals.filter(j=>j.id.startsWith('JOUR-BIG')).length") == 8 and 'Peringatan' not in modal_text(page) and 'Penuh' not in modal_text(page), modal_text(page))
+    ctx.close()
+
+    # --- I3 rahasia tetap di localStorage dan tidak masuk backup; backup/restore jalan di idb
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed(), IDB_CFG); page.wait_for_timeout(200)
+    page.evaluate("Store.secretSet('RAHASIA-IDB-123')")
+    check('I3a rahasia AI di localStorage, bukan di IndexedDB', page.evaluate("localStorage.getItem('g_ai_secret')") == 'RAHASIA-IDB-123' and 'g_ai_secret' not in idb_keys(page))
+    with page.expect_download() as dl: page.evaluate("backupJSON()")
+    raw = pathlib.Path(dl.value.path()).read_text(encoding='utf8'); d = json.loads(raw)
+    check('I3b backup di mode idb memuat data dan tidak memuat rahasia', d['counts']['students'] == 6 and 'RAHASIA-IDB-123' not in raw)
+    page.evaluate("()=>{ allStudents = allStudents.filter(s=>s.name!=='Fajar'); saveAllData(); }")
+    goto_view(page, 'Backup'); page.select_option('#restoreMode', 'gabung'); page.set_input_files('#fileRestore', dl.value.path()); page.evaluate("restoreJSON()"); page.wait_for_timeout(200); page.evaluate("executeConfirm()"); page.wait_for_timeout(200)
+    page.evaluate("Store.flush()"); page.reload(); page.wait_for_function("typeof initApp==='function' && document.querySelectorAll('#navMenu button').length>0"); page.wait_for_timeout(200)
+    check('I3c gabung di mode idb mengembalikan siswa yang terhapus dan bertahan setelah muat ulang', 'Fajar' in page.evaluate("allStudents.map(s=>s.name)") and page.evaluate("localStorage.getItem('g_ai_secret')") == 'RAHASIA-IDB-123')
+    ctx.close()
+
+    # --- I4 IndexedDB tidak bisa dibuka: kembali ke localStorage, data aman
+    ctx = new_ctx(br)
+    page, errs = open_page(ctx, INDEX, t1_seed(), IDB_CFG + "indexedDB.open = function(){ throw new Error('diblokir uji'); };")
+    page.wait_for_timeout(300)
+    check('I4a IndexedDB gagal: kembali ke localStorage, data lama utuh dan terbaca, pengguna diberi tahu', page.evaluate("Store.backend") == 'local' and page.evaluate("allStudents.length") == 6 and len(ls_gkeys(page)) > 5 and 'localStorage' in page.evaluate("document.getElementById('modalMessage').innerText"), (page.evaluate("Store.backend"), ls_gkeys(page)[:3]))
+    ctx.close()
+
+    # --- I5 mode local tetap berfungsi (jalur cadangan)
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed()); page.wait_for_timeout(100)
+    check('I5a mode local (bawaan uji): data di localStorage, Store.backend = local', page.evaluate("Store.backend") == 'local' and 'g_stu' in ls_gkeys(page))
+    ctx.close()
+
+
+# ------------------------------------------------------------------ Tahap 6c: paket asesmen
+PRINT_STUB = "window.__printed = 0; window.print = function(){ window.__printed++; };"
+def seed_questions(page, keep_legacy=False):
+    if not keep_legacy: page.evaluate("()=>{ allAssessmentPkgs = []; saveAllData(); }")
+    page.evaluate("""(x)=>{ allQuestions.push(
+        {id:'Q-PG', periodId: activePeriodId, code:'PG-101', text:'Soal PG satu?\\nA. a\\nB. b', type:'Pilihan Ganda', cog:'C2', diff:'Mudah', key:'B', explanation:'PEMBAHASAN-RAHASIA'},
+        {id:'Q-UR', periodId: activePeriodId, code:'UR-102', text:'Jelaskan zat. ' + x, type:'Uraian', cog:'C4', diff:'Sulit', key:'', explanation:''},
+        {id:'Q-IS', periodId: activePeriodId, code:'IS-103', text:'Isian ...', type:'Isian Singkat', cog:'C1', diff:'Mudah', key:'', explanation:''},
+        {id:'Q-AI', periodId: activePeriodId, code:'PG-104', text:'Soal buatan AI?', type:'Pilihan Ganda', cog:'C3', diff:'Sedang', key:'KUNCI-RAHASIA-AI', explanation:'', source:'ai'});
+        saveAllData(); loadActiveContextData(); }""", XSSP)
+
+def make_paket(page, name='UH <b>1</b>', ids=('Q-PG', 'Q-UR', 'Q-AI'), kind='Formatif', dur='60', instr='Kerjakan dengan jujur.'):
+    page.evaluate("openModalPaket()")
+    page.fill('#pkName', name); page.select_option('#pkKind', kind); page.fill('#pkDuration', dur); page.fill('#pkInstruction', instr)
+    for i in ids: page.check(f'#pkQuestions input[value="{i}"]')
+    page.evaluate("document.getElementById('formPaket').requestSubmit()")
+
+def run_tahap6_paket(br):
+
+    # --- P0 paket lama (sebelum Tahap 6: tanpa jenis/kelas/durasi) tetap tampil, bisa dicetak dan diubah
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed(), PRINT_STUB); goto_view(page, 'Bank Soal')
+    row = page.evaluate("document.getElementById('paketListBody').innerText"); nk = page.evaluate("paketNaskahHtml(allAssessmentPkgs[0].id)"); kk = page.evaluate("paketKunciHtml(allAssessmentPkgs[0].id)")
+    check('P0a paket lama tampil dengan jenis bawaan, naskah dan kunci tanpa "undefined", butir tanpa kunci diperingatkan', 'Paket A' in row and 'Asesmen' in row and 'undefined' not in nk + kk and 'belum punya kunci' in kk, row)
+    page.evaluate("openModalPaket(allAssessmentPkgs[0].id)"); page.fill('#pkName', 'Paket A2'); page.evaluate("document.getElementById('formPaket').requestSubmit()")
+    pk = page.evaluate("allAssessmentPkgs")
+    check('P0b paket lama dapat diubah: ID tetap, tidak dobel, jenis terisi', len(pk) == 1 and pk[0]['id'] == 'PKG-1700000000600' and pk[0]['name'] == 'Paket A2' and pk[0]['kind'] == 'Formatif', pk)
+    ctx.close()
+
+    # --- P1 buat paket
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed(), PRINT_STUB); seed_questions(page); goto_view(page, 'Bank Soal')
+    make_paket(page)
+    pk = page.evaluate("allAssessmentPkgs")
+    check('P1a paket tersimpan: ID PKG-UUID, kelas dan periode aktif, butir berurutan, durasi angka, metadata', len(pk) == 1 and re.fullmatch(r'PKG-[0-9a-f-]{36}', pk[0]['id']) and pk[0]['classId'] == 'CLS-VII1' and pk[0]['periodId'] == PER and pk[0]['questionIds'] == ['Q-PG', 'Q-UR', 'Q-AI'] and pk[0]['duration'] == 60 and pk[0]['createdAt'] and pk[0]['ownerId'] is None, pk)
+    row = page.evaluate("document.getElementById('paketListBody').innerText")
+    check('P1b daftar paket menampilkan nama sebagai teks (HTML di-escape), jumlah butir, dan peringatan kunci kosong', '<b>1</b>' in row and 'belum punya kunci' not in row.split('UR-102')[0] and 'Butir 3' not in row, row[:200])
+    page.evaluate("document.getElementById('modalPaket').classList.add('hidden')")
+    # peringatan: paket berisi IS tanpa kunci
+    make_paket(page, name='UH2', ids=('Q-PG', 'Q-IS'))
+    check('P1c butir non-Uraian tanpa kunci diperingatkan di daftar', 'IS-103' in page.evaluate("document.getElementById('paketListBody').innerText") and 'belum punya kunci' in page.evaluate("document.getElementById('paketListBody').innerText"))
+    ctx.close()
+
+    # --- P2 validasi
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed(), PRINT_STUB); seed_questions(page); goto_view(page, 'Bank Soal')
+    page.evaluate("openModalPaket()"); page.fill('#pkName', 'Kosong'); page.evaluate("savePaket({preventDefault(){}})")
+    check('P2a tanpa butir: ditolak dengan pesan, nol paket tersimpan', 'minimal satu' in modal_text(page) and page.evaluate("allAssessmentPkgs.length") == 0, modal_text(page))
+    page.evaluate("document.getElementById('customModal').classList.add('hidden')"); page.fill('#pkName', 'X'); page.check('#pkQuestions input[value="Q-PG"]'); page.fill('#pkDuration', '999'); page.evaluate("savePaket({preventDefault(){}})")
+    check('P2b durasi di luar 1-300 ditolak', 'Durasi' in modal_text(page) and page.evaluate("allAssessmentPkgs.length") == 0, modal_text(page))
+    ctx.close()
+
+    # --- P3 naskah tanpa kunci, aman XSS, catatan AI dapat dimatikan
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed(), PRINT_STUB); seed_questions(page); goto_view(page, 'Bank Soal'); make_paket(page)
+    pid = page.evaluate("allAssessmentPkgs[0].id")
+    nk = page.evaluate("(id)=>paketNaskahHtml(id)", pid)
+    check('P3a naskah memuat kop sekolah, petunjuk, nomor, dan teks soal', 'SMP Negeri 1 Uji' in nk and 'Kerjakan dengan jujur.' in nk and 'Soal PG satu?' in nk and 'Soal buatan AI?' in nk and 'Waktu 60 menit' in nk, nk[:300])
+    check('P3b naskah TIDAK memuat kunci maupun pembahasan', 'KUNCI-RAHASIA-AI' not in nk and 'PEMBAHASAN-RAHASIA' not in nk and 'Kunci' not in nk)
+    check('P3c XSS: <img onerror> di soal dan <b> di nama paket di-escape, tidak dieksekusi', '<img' not in nk and '&lt;img' in nk and '&lt;b&gt;1' in nk and page.evaluate("window.__xss") is None)
+    check('P3d catatan "dibuat dengan AI" tampil bila ada butir AI', 'dibuat dengan bantuan AI' in nk)
+    page.evaluate("setPrintAiMark(false)"); nk2 = page.evaluate("(id)=>paketNaskahHtml(id)", pid)
+    check('P3e catatan AI dapat dimatikan dan pilihan tersimpan', 'bantuan AI' not in nk2 and page.evaluate("JSON.parse(localStorage.getItem('g_set')).printAiMark") is False)
+    ctx.close()
+
+    # --- P4 kunci
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed(), PRINT_STUB); seed_questions(page); goto_view(page, 'Bank Soal'); make_paket(page, ids=('Q-PG', 'Q-UR', 'Q-IS', 'Q-AI'))
+    pid = page.evaluate("allAssessmentPkgs[0].id"); kk = page.evaluate("(id)=>paketKunciHtml(id)", pid)
+    kn = kk.replace(' ', '').replace('\n', '')
+    check('P4a kunci memuat kunci PG dan AI, pembahasan, skor 25 per butir, total 100', 'KUNCI JAWABAN' in kk and 'PEMBAHASAN-RAHASIA' in kk and 'KUNCI-RAHASIA-AI' in kk and kn.count('>25<') == 4 and '>100<' in kn, kk[:200])
+    check('P4b kunci memperingatkan butir Isian tanpa kunci, Uraian tanpa kunci tidak diperingatkan', 'IS-103' in kk.split('Perhatian')[1] and 'UR-102' not in kk.split('Perhatian')[1].split('</div>')[0], kk[:400])
+    ctx.close()
+
+    # --- P5 cetak: dialog dipanggil dan tampilan dipulihkan
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed(), PRINT_STUB); seed_questions(page); goto_view(page, 'Bank Soal'); make_paket(page)
+    pid = page.evaluate("allAssessmentPkgs[0].id"); page.evaluate("(id)=>printPaket(id,'kunci')", pid); page.wait_for_timeout(250)
+    check('P5a cetak memanggil dialog cetak sekali dan memulihkan tampilan', page.evaluate("window.__printed") == 1 and page.evaluate("document.getElementById('printPaketCanvas').classList.contains('hidden') && !document.getElementById('bankSoalMainContent').classList.contains('hidden') && !document.getElementById('paketSection').classList.contains('hidden')"))
+    ctx.close()
+
+    # --- P6 ubah dan hapus paket
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed(), PRINT_STUB); seed_questions(page); goto_view(page, 'Bank Soal'); make_paket(page)
+    pid = page.evaluate("allAssessmentPkgs[0].id"); n_q = page.evaluate("allQuestions.length")
+    page.evaluate("(id)=>openModalPaket(id)", pid); pre = page.evaluate("[...document.querySelectorAll('#pkQuestions input:checked')].map(i=>i.value)")
+    page.fill('#pkName', 'UH Ubah'); page.uncheck('#pkQuestions input[value="Q-UR"]'); page.evaluate("document.getElementById('formPaket').requestSubmit()")
+    pk = page.evaluate("allAssessmentPkgs")
+    check('P6a ubah: form terisi dari paket, ID tetap, nama dan butir berubah, tidak dobel', pre == ['Q-PG', 'Q-UR', 'Q-AI'] and len(pk) == 1 and pk[0]['id'] == pid and pk[0]['name'] == 'UH Ubah' and pk[0]['questionIds'] == ['Q-PG', 'Q-AI'], (pre, pk))
+    page.evaluate("(id)=>deletePaket(id)", pid); page.evaluate("executeConfirm()")
+    check('P6b hapus paket: Bank Soal tidak ikut terhapus', page.evaluate("allAssessmentPkgs.length") == 0 and page.evaluate("allQuestions.length") == n_q)
+    ctx.close()
+
+    # --- P7 hapus butir Bank Soal dicabut dari paket (tanpa data yatim)
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed(), PRINT_STUB); seed_questions(page); goto_view(page, 'Bank Soal')
+    make_paket(page, name='A', ids=('Q-PG', 'Q-UR')); page.evaluate("document.getElementById('modalPaket').classList.add('hidden')"); make_paket(page, name='B', ids=('Q-UR',)); page.evaluate("document.getElementById('modalPaket').classList.add('hidden')")
+    page.evaluate("deleteQuestion('Q-UR')"); msg = page.evaluate("document.getElementById('confirmMessage').innerText")
+    check('P7a konfirmasi hapus butir menyebut 2 paket terkait', '2 paket asesmen' in msg, msg)
+    page.evaluate("executeConfirm()")
+    pk = page.evaluate("allAssessmentPkgs.map(p=>({n:p.name,q:p.questionIds}))")
+    check('P7b butir dicabut dari paket A; paket B yang jadi kosong ikut dihapus; audit bersih', pk == [{'n': 'A', 'q': ['Q-PG']}] and page.evaluate("Integrity.audit().length") == 0, pk)
+    page.evaluate("allAssessmentPkgs[0].questionIds.push('Q-HILANG')")
+    check('P7c audit mendeteksi paket yang memuat butir hilang', any('paket asesmen memuat soal' in a['label'] for a in page.evaluate("Integrity.audit()")))
+    ctx.close()
+
+    # --- P8 hapus kelas, bertahan setelah muat ulang, ikut backup
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed(), PRINT_STUB); seed_questions(page); goto_view(page, 'Bank Soal'); make_paket(page)
+    page.evaluate("document.getElementById('modalPaket').classList.add('hidden')")
+    page.reload(); page.wait_for_function("typeof initApp==='function' && document.querySelectorAll('#navMenu button').length>0")
+    check('P8a paket bertahan setelah muat ulang', page.evaluate("allAssessmentPkgs.length") == 1)
+    with page.expect_download() as dl: page.evaluate("backupJSON()")
+    check('P8b paket ikut backup v2', json.loads(pathlib.Path(dl.value.path()).read_text(encoding='utf8'))['counts']['assessmentPkgs'] == 1)
+    desc = page.evaluate("Integrity.describe(Integrity.classDeps('CLS-VII1'))")
+    page.evaluate("Integrity.cascadeClass('CLS-VII1')")
+    check('P8c hapus kelas: konfirmasi menyebut paket, paket kelas itu ikut terhapus, audit bersih', '1 paket asesmen' in desc and page.evaluate("allAssessmentPkgs.length") == 0 and page.evaluate("Integrity.audit().length") == 0, desc)
+    ctx.close()
+
+
 def main():
     with sync_playwright() as p:
-        br = p.chromium.launch()
+        br = getattr(p, os.environ.get('BROWSER', 'chromium')).launch()  # BROWSER=firefox|webkit untuk uji lintas browser (perlu: playwright install firefox webkit)
 
         # --- U1: seluruh menu terbuka tanpa galat + paritas dengan file asli
         ctx = new_ctx(br)
@@ -1467,6 +1721,9 @@ def main():
         run_tahap3(br)
         run_tahap4(br)
         run_tahap5(br)
+        run_tahap6_backup(br)
+        run_tahap6_idb(br)
+        run_tahap6_paket(br)
         run_ai_settings(br)
 
         br.close()
