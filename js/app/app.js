@@ -229,4 +229,3 @@
             if (viewId === 'documents') renderDocuments(); // TAHAP 20
             if (viewId === 'settings') renderSettings();
         }
-

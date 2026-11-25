@@ -121,6 +121,7 @@ def new_ctx(browser):
         u = r.request.url
         if 'cdn.tailwindcss.com' in u: return r.fulfill(status=200, content_type='application/javascript', body='')
         if 'cdn.jsdelivr.net' in u: return r.fulfill(status=200, content_type='application/javascript', body=STUB_CHART)
+        if u.split('?')[0].endswith('/app-config.js'): return r.fulfill(status=200, content_type='application/javascript', body='window.APP_CONFIG = window.APP_CONFIG || {};')  # uji tidak boleh bergantung pada URL/token asli
         if u.startswith('file://') or u.startswith('http://127.0.0.1'): return r.continue_()
         return r.abort()
     ctx.route('**/*', route)
@@ -1102,6 +1103,141 @@ def run_ai_settings(br):
     check('Z4d penghitung menampilkan token per tugas (interpretasi, modul)', 'interpretasi' in info and 'modul' in info, info)
     ctx.close()
 
+# ------------------------------------------------------------------ Tahap 5: narasi rapor, laporan wali, isi surat
+XSSP = '<img src=x onerror="window.__xss=1">'
+def rapor_builder(bad_first=False, payload=False):
+    st = {'n': 0}
+    def b(rec):
+        st['n'] += 1; pr = prompt_of(rec); out = []
+        for m in re.finditer(r'^(\[S\d+\]) \| nilai akhir: (\S+) \| predikat: (\S+) \| status: (Tuntas|Belum Tuntas)', pr, re.M):
+            ok = m.group(4) == 'Tuntas'
+            txt = f"Ananda {m.group(1)} " + ("telah tuntas dengan nilai akhir %s dan menunjukkan capaian baik pada tujuan pembelajaran." % m.group(2) if ok else "belum tuntas dengan nilai akhir %s dan perlu penguatan pada tujuan pembelajaran." % m.group(2))
+            if bad_first and st['n'] == 1 and not ok: txt = f"Ananda {m.group(1)} telah tuntas seluruh kompetensi dengan sangat baik sekali."
+            if payload and not out: txt += ' ' + XSSP
+            out.append({"kode": m.group(1), "teks": txt})
+        return {"narasi": out}
+    return b
+
+def code_in(pr, label):
+    m = re.search(r'Siswa: (\[S\d+\])', pr); return m.group(1) if m else None
+
+def progress_builder(bad_first=False):
+    st = {'n': 0}
+    def b(rec):
+        st['n'] += 1; pr = prompt_of(rec); c = code_in(pr, '')
+        t = f"Ananda {c} belum tuntas dengan kehadiran sangat baik; mohon dampingi ananda mengerjakan tugas di rumah setiap hari agar capaiannya meningkat."
+        if bad_first and st['n'] == 1: t = f"Ananda {c} telah tuntas dan hebat sekali dalam seluruh pembelajaran semester ini tanpa kendala."
+        return {"laporan": t}
+    return b
+
+def surat_builder(bad_first=False):
+    st = {'n': 0}
+    def b(rec):
+        st['n'] += 1; pr = prompt_of(rec); c = code_in(pr, '') or re.search(r'kode (\[S\d+\])', pr).group(1)
+        isi = f"Dengan hormat,\n\nKami mengundang Bapak/Ibu untuk berdiskusi tentang perkembangan ananda {c} pada waktu yang akan kami informasikan kemudian.\n\nDemikian surat ini kami sampaikan. Terima kasih atas perhatian Bapak/Ibu."
+        if bad_first and st['n'] == 1: isi = "Nomor: 421/01\n\nDengan hormat,\n\nKami mengundang Bapak/Ibu untuk berdiskusi tentang perkembangan ananda " + c + " di sekolah pada waktu yang akan kami informasikan."
+        return {"isi": isi}
+    return b
+
+def run_tahap5(br):
+    # --- Z1 narasi rapor: draf -> edit -> setuju -> simpan
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed()); log = mock_ai(ctx, seq_handler([rapor_builder()])); ai_ready(page)
+    goto_view(page, 'Analisis & Rapor'); n_rd = page.evaluate("allRaporDescriptions.length")
+    page.evaluate("document.querySelector('button[onclick=\"generateAllNarration()\"]').click()")
+    page.wait_for_function("!document.getElementById('modalAiReview').classList.contains('hidden')", timeout=15000)
+    pr = prompt_of(log[0]); names = page.evaluate("[...document.querySelectorAll('#aiReviewList label')].map(l=>l.innerText)")
+    check('Z1a prompt rapor memakai KODE saja; siswa nilai belum lengkap tidak diikutkan', '[S01]' in pr and '[S02]' in pr and '[S03]' in pr and not re.search(r'^\[S04\] \|', pr, re.M) and not re.search(r'Ahmad|Siti|Budi|Dewi|1001|1002', pr), pr[:300])
+    check('Z1b pratinjau: 3 draf dengan NAMA asli dipulihkan lokal, info 1 siswa tidak diikutkan', len(names) == 3 and 'Siti Aminah' in ' '.join(names) and '1 siswa tidak diberi narasi' in page.evaluate("document.getElementById('aiReviewInfo').innerText"), names)
+    check('Z1c NOL narasi tersimpan sebelum disetujui', page.evaluate("allRaporDescriptions.length") == n_rd)
+    check('Z1d teks draf memuat nama asli, bukan kode', all('[S0' not in t for t in names))
+    page.evaluate("document.querySelectorAll('#aiReviewList textarea')[1].value = 'Narasi hasil suntingan guru untuk siswa kedua.'")
+    page.evaluate("document.querySelectorAll('#aiReviewList input[type=checkbox]')[2].checked = false")
+    page.evaluate("AIUI.reviewSave()")
+    rd = page.evaluate("JSON.parse(localStorage.getItem('g_rd') || '[]')") if False else page.evaluate("allRaporDescriptions.map(d=>({s:d.studentId,t:d.text}))")
+    check('Z1e disetujui: hanya 2 tersimpan (satu dicentang-lepas), teks suntingan guru dipakai', len(rd) == 2 and any(d['t'] == 'Narasi hasil suntingan guru untuk siswa kedua.' for d in rd), rd)
+    check('Z1f narasi memuat nama siswa, tanpa kode', any('Ahmad Fauzan' in d['t'] for d in rd) and not any('[S0' in d['t'] for d in rd), rd)
+    page.select_option('#raporStudentSelect', f"STU-{T0 + 2}")
+    check('Z1g rapor menampilkan narasi tersimpan', 'suntingan guru' in page.evaluate("document.getElementById('rpNarration').innerText"))
+    ctx.close()
+
+    # --- Z2 draf bertentangan dengan status ditolak dan diperbaiki otomatis (2 permintaan)
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed()); log = mock_ai(ctx, seq_handler([rapor_builder(bad_first=True), rapor_builder()])); ai_ready(page)
+    goto_view(page, 'Analisis & Rapor'); page.evaluate("document.querySelector('button[onclick=\"generateAllNarration()\"]').click()")
+    page.wait_for_function("!document.getElementById('modalAiReview').classList.contains('hidden')", timeout=15000)
+    check('Z2a siswa belum tuntas dinarasikan "tuntas": ditolak dan diperbaiki (2 permintaan)', len(log) == 2 and 'BELUM TUNTAS' in log[1]['body']['contents'][-1]['parts'][0]['text'], len(log))
+    ctx.close()
+
+    # --- Z3 XSS pada keluaran AI
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed()); log = mock_ai(ctx, seq_handler([rapor_builder(payload=True)])); ai_ready(page)
+    goto_view(page, 'Analisis & Rapor'); page.evaluate("document.querySelector('button[onclick=\"generateAllNarration()\"]').click()")
+    page.wait_for_function("!document.getElementById('modalAiReview').classList.contains('hidden')", timeout=15000)
+    page.evaluate("AIUI.reviewSave()"); page.wait_for_timeout(200)
+    page.select_option('#raporStudentSelect', f"STU-{T0 + 1}"); page.wait_for_timeout(100)
+    check('Z3a XSS: keluaran AI berisi <img onerror> tidak dieksekusi di pratinjau maupun rapor', page.evaluate("window.__xss") is None and '<img' in page.evaluate("document.getElementById('rpNarration').innerText"))
+    ctx.close()
+
+    # --- Z4 tabel per-TP memakai data nyata
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed()); goto_view(page, 'Analisis & Rapor')
+    page.select_option('#raporStudentSelect', f"STU-{T0 + 1}")
+    cells = page.evaluate("[...document.querySelectorAll('#rpTableBody tr')].map(r=>[...r.children].map(c=>c.innerText.trim()))")
+    tp_row, fin_row = cells[0], cells[-1]
+    check('Z4a baris TP menampilkan nilai asesmen TP itu (80), bukan nilai akhir (75)', tp_row[1] == '80' and fin_row[1] == '75' and 'Mencapai KKTP' in tp_row[3], cells)
+    page.select_option('#raporStudentSelect', f"STU-{T0 + 2}")
+    cells = page.evaluate("[...document.querySelectorAll('#rpTableBody tr')].map(r=>[...r.children].map(c=>c.innerText.trim()))")
+    check('Z4b siswa berbeda memberi nilai TP berbeda (50 / belum mencapai KKTP)', cells[0][1] == '50' and 'Belum mencapai KKTP' in cells[0][3], cells)
+    page.select_option('#raporStudentSelect', f"STU-{T0 + 4}")
+    cells = page.evaluate("[...document.querySelectorAll('#rpTableBody tr')].map(r=>[...r.children].map(c=>c.innerText.trim()))")
+    check('Z4c siswa UAS kosong: nilai TP tetap tampil (60), nilai akhir "-" dengan penjelasan jujur', cells[0][1] == '60' and cells[-1][1] == '-' and 'belum lengkap' in cells[-1][3] and 'UAS' in cells[-1][3], cells)
+    check('Z4d tanpa narasi tersimpan: tidak ada klaim palsu "menguasai dengan baik"', 'menguasai materi' not in page.evaluate("document.getElementById('rpNarration').innerText"))
+    ctx.close()
+
+    # --- Z5 laporan wali
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed()); log = mock_ai(ctx, seq_handler([progress_builder(bad_first=True), progress_builder()])); ai_ready(page)
+    goto_view(page, 'Komunikasi'); page.evaluate("switchCommTab('progress')"); page.select_option('#progStudentSelect', f"STU-{T0 + 2}")
+    n_rd = page.evaluate("allRaporDescriptions.length")
+    page.evaluate("document.querySelector('button[onclick=\"generateProgressAI()\"]').click()")
+    page.wait_for_function("document.getElementById('prNarrative').value.length > 20", timeout=15000)
+    pr = prompt_of(log[0]); val = page.evaluate("document.getElementById('prNarrative').value")
+    check('Z5a prompt laporan wali memakai kode, tanpa nama/NIS, memuat tren dan kehadiran', '[S02]' in pr and not re.search(r'Siti|Ahmad|1002', pr) and 'Tren nilai' in pr and 'Kehadiran: 100%' in pr, pr[:300])
+    check('Z5b draf yang bertentangan dengan status ditolak dan diperbaiki otomatis (2 permintaan)', len(log) == 2 and 'BELUM TUNTAS' in log[1]['body']['contents'][-1]['parts'][0]['text'], len(log))
+    check('Z5c draf memuat nama asli, bukan kode', 'Siti Aminah' in val and '[S0' not in val, val)
+    check('Z5d NOL tersimpan sebelum tombol Simpan Catatan (dulu otomatis tersimpan)', page.evaluate("allRaporDescriptions.length") == n_rd)
+    page.evaluate("saveProgressNarrative()")
+    check('Z5e Simpan Catatan menyimpan satu catatan untuk siswa itu', page.evaluate("allRaporDescriptions.length") == n_rd + 1 and 'Siti Aminah' in page.evaluate("allRaporDescriptions[allRaporDescriptions.length-1].text"))
+    page.fill('#prNarrative', 'Teks lain'); page.evaluate("saveProgressNarrative()")
+    check('Z5f menimpa narasi yang sudah ada meminta konfirmasi', 'Timpa' in page.evaluate("document.getElementById('confirmMessage').innerText"))
+    ctx.close()
+
+    # --- Z6 isi surat
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed()); log = mock_ai(ctx, seq_handler([surat_builder(bad_first=True), surat_builder()])); ai_ready(page)
+    goto_view(page, 'Surat'); page.evaluate("openModalDocument()"); page.select_option('#docStudentId', f"STU-{T0 + 2}")
+    n_doc = page.evaluate("allDocuments.length")
+    page.evaluate("document.querySelector('button[onclick=\"generateDocAI()\"]').click()")
+    page.wait_for_function("document.getElementById('docContent').value.length > 20", timeout=15000)
+    pr = prompt_of(log[0]); val = page.evaluate("document.getElementById('docContent').value")
+    check('Z6a prompt surat memakai kode, tanpa nama/NIS; alasan dari data kehadiran dan nilai', 'kode [S02]' in pr and not re.search(r'Siti|Ahmad|1002', pr) and 'Kehadiran: 100%' in pr and 'Nilai akhir: 50' in pr, pr[:300])
+    check('Z6b isi dengan "Nomor:" ditolak dan diperbaiki otomatis (2 permintaan)', len(log) == 2 and 'nomor' in log[1]['body']['contents'][-1]['parts'][0]['text'].lower(), len(log))
+    check('Z6c isi surat berawal "Dengan hormat,", nama asli dipulihkan, tanpa nomor/tanda tangan', val.startswith('Dengan hormat,') and 'Siti Aminah' in val and 'Nomor' not in val and 'Hormat kami' not in val, val)
+    check('Z6d NOL surat tersimpan sebelum guru menyimpan', page.evaluate("allDocuments.length") == n_doc)
+    page.fill('#docNumber', '421/01/SMP/2026'); page.evaluate("document.getElementById('formDocument').requestSubmit()")
+    d = page.evaluate("allDocuments.map(x=>({n:x.docNumber,c:x.content,s:x.studentId}))")
+    check('Z6e surat tersimpan dengan nomor dari guru dan isi dari draf', len(d) == n_doc + 1 and d[-1]['n'] == '421/01/SMP/2026' and 'Siti Aminah' in d[-1]['c'], d)
+    ctx.close()
+
+    # --- Z7 AI belum siap: nol permintaan, tombol disembunyikan
+    ctx = new_ctx(br); page, errs = open_page(ctx, INDEX, t1_seed()); log = mock_ai(ctx, lambda rec: gem({}))
+    page.evaluate("AIUI.applyVisibility()")
+    hidden = page.evaluate("[...document.querySelectorAll('[data-ai]')].every(e=>e.classList.contains('hidden'))")
+    check('Z7a AI belum siap: semua tombol bertanda data-ai disembunyikan', hidden and page.evaluate("document.querySelectorAll('[data-ai]').length") >= 6)
+    for fn in ("generateAllNarration()", "generateProgressAI()", "generateDocAI()"):
+        if fn == "generateDocAI()": page.evaluate("openModalDocument()")
+        page.evaluate(fn); page.wait_for_timeout(100)
+    check('Z7b dipanggil langsung saat AI belum siap: nol permintaan jaringan', len(log) == 0, len(log))
+    ai_ready(page); page.evaluate("AIUI.applyVisibility()")
+    check('Z7c AI siap: tombol tampil kembali', page.evaluate("[...document.querySelectorAll('[data-ai]')].every(e=>!e.classList.contains('hidden'))"))
+    ctx.close()
+
+
 def main():
     with sync_playwright() as p:
         br = p.chromium.launch()
@@ -1330,6 +1466,7 @@ def main():
         run_tahap2(br)
         run_tahap3(br)
         run_tahap4(br)
+        run_tahap5(br)
         run_ai_settings(br)
 
         br.close()

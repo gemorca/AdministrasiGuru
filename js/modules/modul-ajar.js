@@ -187,4 +187,3 @@
                 document.getElementById('genResultContainer').scrollIntoView({ behavior: 'smooth' });
             });
         }
-

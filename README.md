@@ -1,4 +1,4 @@
-# Sistem Administrasi Guru, Tahap 0-4 (Fondasi, Perbaikan Inti, Mesin AI, Perangkat Ajar dan Pembelajaran AI)
+# Sistem Administrasi Guru, Tahap 0-5 (Fondasi, Perbaikan Inti, Mesin AI, Perangkat Ajar, Pembelajaran AI, Rapor dan Komunikasi AI)
 
 Buka `index.html` langsung di browser (tidak perlu server). Perilaku semua menu sama dengan file asli.
 
@@ -10,8 +10,8 @@ Buka `index.html` langsung di browser (tidak perlu server). Perilaku semua menu 
 - `apps-script/`: `Code.gs` (proxy Gemini) dan `PANDUAN.md` (langkah pasang).
 - `js/app/`: `state.js`, `ui.js`, `app.js` (navigasi, init), `boot.js` (titik masuk).
 - `js/modules/`: satu berkas per menu.
-- `tests/unit/`: 108 uji unit. Jalankan `node --test tests/unit/*.test.js`.
-- `tests/run_tests.py`: 174 uji browser (termasuk menjalankan uji unit). Jalankan `python3 tests/run_tests.py [file_asli.html]`. Butuh `pip install playwright` dan Chromium. Argumen opsional = file asli untuk uji paritas.
+- `tests/unit/`: 117 uji unit. Jalankan `node --test tests/unit/*.test.js`.
+- `tests/run_tests.py`: 198 uji browser tanpa file asli (termasuk menjalankan uji unit; uji paritas tambahan bila file asli diberikan). Jalankan `python3 tests/run_tests.py [file_asli.html]`. Butuh `pip install playwright` dan Chromium. Argumen opsional = file asli untuk uji paritas.
 - `tools/build_from_original.py`: skrip yang menghasilkan proyek ini dari file asli (untuk jejak audit).
 
 ## Aturan pengembangan
@@ -36,7 +36,7 @@ Buka `index.html` langsung di browser (tidak perlu server). Perilaku semua menu 
 - Data siswa/wali WAJIB dianonimkan dengan `Anonymizer` dan dikirim lewat opsi `pii`. Permintaan yang masih memuat nama/NIS/telepon dikenal ditolak otomatis.
 - Rahasia (API key atau token proxy) hanya di `Store.secretGet/Set/Clear` (kunci `g_ai_secret`). Tidak masuk backup, tidak ditampilkan, tidak masuk log.
 - Hasil AI selalu draf: validasi skema, tampilkan, guru menyimpan.
-- Tersambung ke Gemini: Analisis CP, Modul Ajar, Generate Soal, Kisi-kisi (Tahap 3); Proyek P5, Modul P5, Tugas/LKPD, tafsiran analisis ulangan, rekomendasi remedial/pengayaan (Tahap 4). MASIH simulasi sampai Tahap 5: narasi rapor, laporan wali, isi surat. Tombolnya sudah bertanda `data-ai`; ubah `AIUI.HIDE_WHEN_OFF` menjadi `true` setelah semua fitur tersambung (Tahap 5).
+- Tersambung ke Gemini: Analisis CP, Modul Ajar, Generate Soal, Kisi-kisi (Tahap 3); Proyek P5, Modul P5, Tugas/LKPD, tafsiran analisis ulangan, rekomendasi remedial/pengayaan (Tahap 4). Tahap 5: narasi rapor, laporan wali, isi surat. Tidak ada lagi simulasi `setTimeout`. `AIUI.HIDE_WHEN_OFF = true`: tombol bertanda `data-ai` disembunyikan saat AI belum siap.
 - Tidak ada panggilan nyata ke Gemini di uji otomatis (memakai tiruan sesuai dokumentasi). Pembuktian dengan key asli = tombol Uji Koneksi.
 
 ## Perangkat ajar AI (Tahap 3)
@@ -56,3 +56,10 @@ Buka `index.html` langsung di browser (tidak perlu server). Perilaku semua menu 
 - Model dipilih dari dropdown (daftar terverifikasi) atau "Lainnya". Tombol "Muat daftar model dari Gemini" mengambil daftar nyata untuk key tersebut lewat proxy (`op: models`) atau langsung.
 - Gaya ringkas (adaptasi skill caveman tingkat lite) hanya untuk tafsiran analisis ulangan dan rekomendasi tindak lanjut, ditandai `terse: true` pada pemanggilan `AIService.generate`. Dokumen yang dibaca siswa/orang tua tidak pernah memakainya.
 - Penghitung pemakaian mencatat token per tugas sehingga efek gaya ringkas dapat diukur oleh guru.
+
+## Rapor, laporan wali, surat (Tahap 5)
+- Semua angka (nilai akhir, predikat, kehadiran, tren, TP tercapai/belum) dihitung kode di `aiFactsOf` (rapor.js). AI hanya menulis kalimat. Siswa dikirim sebagai kode `[S01]`; nama dipulihkan lokal sesudah validasi.
+- `AITasks.rapor` (batch 10, `AIUI.review` dengan teks yang bisa disunting, simpan hanya yang dicentang ke `allRaporDescriptions`), `AITasks.progress` (satu siswa, draf masuk ke kolom catatan, tersimpan lewat tombol Simpan Catatan; menimpa narasi rapor yang ada butuh konfirmasi), `AITasks.surat` (hanya isi; nomor, tanggal, kop, tanda tangan tetap dari aplikasi; tersimpan saat guru menyimpan surat).
+- Validasi lokal: kode lengkap dan tidak ganda, tanpa kode siswa lain, konsisten dengan status (siswa belum tuntas tidak boleh "tuntas", sebaliknya; nilai belum lengkap tidak boleh keduanya), tanpa istilah diagnosis, tanpa tautan; surat wajib berawal "Dengan hormat,", tanpa nomor/tanda tangan/tanggal/jam karangan. Satu perbaikan otomatis bila gagal.
+- Tabel rapor per TP kini memakai rata-rata nilai asesmen yang dikaitkan ke TP itu (bukan nilai akhir yang sama). Narasi bawaan palsu dihapus.
+- Uji browser tidak lagi membaca `app-config.js` asli (dicegat dan dikosongkan) agar URL/token nyata tidak mengubah hasil uji.

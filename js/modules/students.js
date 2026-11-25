@@ -111,4 +111,3 @@
             };
             reader.readAsText(file);
         }
-

@@ -41,35 +41,25 @@
             document.getElementById('modalDocument').classList.remove('hidden');
         }
 
-        function generateDocAI() {
+        async function generateDocAI() {
             let type = document.getElementById('docType').value;
-            let stId = document.getElementById('docStudentId').value;
-            let st = students.find(s => s.id === stId);
-            let pName = st ? st.name : '(Nama Siswa)';
-            
-            let btn = document.querySelector('button[onclick="generateDocAI()"]');
-            let origHTML = btn.innerHTML;
-            btn.innerHTML = "⏳ AI Menyusun...";
-            btn.disabled = true;
+            let st = students.find(s => s.id === document.getElementById('docStudentId').value);
+            if (!st) { showModal("Peringatan", "Pilih peserta didik terlebih dahulu.", "⚠️"); return; }
+            if (!AIUI.ensureReady()) return;
 
-            setTimeout(() => {
-                let text = "";
-                if (type.includes("Pemanggilan")) {
-                    text = `Dengan hormat,\n\nSeiring dengan proses evaluasi kegiatan belajar mengajar pada semester ini, kami mengamati adanya beberapa hal yang memerlukan komunikasi dan diskusi lebih lanjut terkait perkembangan akademik serta kedisiplinan ananda ${pName}.\n\nOleh karena itu, kami mengundang Bapak/Ibu Wali Murid untuk dapat hadir ke sekolah guna berkonsultasi secara langsung pada waktu yang disepakati. Kehadiran Bapak/Ibu sangat berarti bagi sinergi kita dalam mendukung kemajuan belajar ananda ke depannya.\n\nDemikian surat pemanggilan ini kami sampaikan. Atas perhatian dan kerja sama yang baik dari Bapak/Ibu, kami ucapkan terima kasih.`;
-                } else if (type.includes("Apresiasi")) {
-                    text = `Dengan hormat,\n\nMelalui surat ini, kami selaku pendidik dan pihak sekolah ingin menyampaikan rasa bangga serta apresiasi yang setinggi-tingginya atas pencapaian, dedikasi, dan perkembangan positif yang luar biasa dari ananda ${pName} selama periode pembelajaran ini.\n\nAnanda telah menunjukkan tanggung jawab yang sangat baik dalam menyelesaikan tugas akademik maupun partisipasi aktif di kelas. Kami sangat berharap momentum prestasi dan sikap positif ini dapat terus dipertahankan.\n\nDemikian surat apresiasi ini kami sampaikan. Kami berterima kasih atas dukungan penuh Bapak/Ibu dari rumah yang turut membentuk karakter positif ananda.`;
-                } else if (type.includes("Peringatan")) {
-                    text = `Dengan hormat,\n\nBerdasarkan pantauan harian dan catatan portofolio akademik, kami ingin menginformasikan bahwa ananda ${pName} tercatat mengalami keterlambatan dalam pengumpulan beberapa tugas esensial yang menjadi prasyarat penilaian kompetensi.\n\nKami mohon bantuan dan pendampingan Bapak/Ibu di rumah agar ananda dapat segera menyelesaikan tugas-tugas yang tertinggal, agar tidak mempengaruhi evaluasi nilai akhir. \n\nDemikian pemberitahuan ini kami sampaikan demi kelancaran proses belajar ananda. Terima kasih atas pengertiannya.`;
-                } else {
-                    text = `Dengan hormat,\n\nBersama surat ini, kami memberitahukan perihal penting terkait proses dan kelancaran kegiatan akademik yang melibatkan ananda ${pName}. Kami memohon Bapak/Ibu dapat meninjau informasi yang terlampir dan terus mendampingi proses belajar ananda secara konsisten.\n\nDemikian pemberitahuan ini kami buat untuk dapat menjadi perhatian bersama. Atas kerja samanya, kami ucapkan terima kasih.`;
-                }
-                
-                document.getElementById('docContent').value = text;
-                
-                btn.innerHTML = origHTML;
-                btn.disabled = false;
-                showModal("AI Generator", "Draft isi surat berhasil dibuat secara instan. Silakan modifikasi teks tersebut sesuai kebutuhan riil.", "✨");
-            }, 800);
+            let btn = document.querySelector('button[onclick="generateDocAI()"]');
+            let out = await AIUI.run(btn, 'AI menyusun', async (signal) => {
+                const pii = AIUI.pii();
+                const row = { code: pii.code(st.id), ...aiFactsOf(st.id) };
+                const ctx = { subject: settings.subject, kktp: Grading.config(settings).kktp };
+                const t = AITasks.surat.build({ type, row, ctx });
+                const r = await AIService.generate({ task: 'isi-surat', ...t, signal, pii });
+                return pii.restore(AITasks.surat.normalize(r.data.isi));
+            });
+            if (!out) return;
+            // Draf: hanya mengisi kolom isi. Nomor, kop, tanggal, tanda tangan tetap dari aplikasi. Tersimpan saat guru menyimpan surat.
+            document.getElementById('docContent').value = out;
+            showModal("Draf Siap", "Draf isi surat sudah masuk ke kolom isi. Periksa dan ubah bila perlu sebelum menyimpan.", "✨");
         }
 
         function saveDocument(e) {
@@ -204,4 +194,3 @@
             link.click();
             document.body.removeChild(link);
         }
-

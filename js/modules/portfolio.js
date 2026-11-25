@@ -21,4 +21,3 @@
                 </tr>`;
             }).join('') : `<tr><td colspan="5" class="text-center py-8 text-slate-400 italic">Belum ada data siswa.</td></tr>`;
         }
-

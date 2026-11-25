@@ -105,4 +105,3 @@
             updateHeader();
             showModal("Sukses", "Pengaturan sekolah dan periode berhasil disimpan.", "✅");
         }
-        

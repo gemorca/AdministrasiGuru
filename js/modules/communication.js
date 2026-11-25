@@ -227,37 +227,41 @@
             if (narEl) narEl.value = descObj ? descObj.text : "";
         }
 
-        function generateProgressAI() {
+        async function generateProgressAI() {
             let stId = document.getElementById('progStudentSelect').value;
             let st = students.find(s => s.id === stId);
             if (!st) return;
+            if (!AIUI.ensureReady()) return;
 
-            let att = calcAttStats(st.id);
-            let r = calcFinalScore(st.id);
-            
             let btn = document.querySelector('button[onclick="generateProgressAI()"]');
-            let origText = btn.innerHTML;
-            btn.innerHTML = "⏳ AI Menyusun...";
-            btn.disabled = true;
+            let out = await AIUI.run(btn, 'AI menyusun', async (signal) => {
+                const pii = AIUI.pii();
+                const row = { code: pii.code(st.id), ...aiFactsOf(st.id) };
+                const ctx = { subject: settings.subject, kktp: Grading.config(settings).kktp };
+                const t = AITasks.progress.build({ row, ctx });
+                const r = await AIService.generate({ task: 'laporan-wali', ...t, signal, pii });
+                return pii.restore(String(r.data.laporan).trim());
+            });
+            if (!out) return;
+            // Draf saja: masuk ke kolom teks, belum tersimpan sampai guru menekan Simpan.
+            document.getElementById('prNarrative').value = out;
+            showModal("Draf Siap", "Draf laporan perkembangan sudah masuk ke kolom catatan. Periksa dan ubah bila perlu, lalu tekan Simpan Catatan.", "✨");
+        }
 
-            setTimeout(() => {
-                let txt = `Berdasarkan observasi periode ini, ananda ${st.name} menunjukkan capaian yang ${r.passed ? 'baik' : 'membutuhkan perhatian'} secara akademik dengan rata-rata pencapaian ${r.final === null ? '(belum lengkap)' : r.final}. Tingkat kehadiran ananda mencapai ${att.pct}%. `;
-                
-                if (r.passed) {
-                    txt += `Kami mengapresiasi kemandirian dan tanggung jawab ananda dalam menyelesaikan tugas-tugas pembelajaran. Harapannya, motivasi belajar ini dapat terus dipertahankan.`;
-                } else {
-                    txt += `Kami merekomendasikan adanya pendampingan lebih lanjut di rumah, terutama untuk memastikan penyelesaian tugas dan penguatan materi dasar, agar ananda dapat mencapai Kriteria Ketuntasan (KKTP) secara maksimal.`;
-                }
-                
-                document.getElementById('prNarrative').value = txt;
-
-                // Auto save to rapor description so it persists
+        function saveProgressNarrative() {
+            let stId = document.getElementById('progStudentSelect').value;
+            let st = students.find(s => s.id === stId);
+            if (!st) return;
+            let text = document.getElementById('prNarrative').value.trim();
+            if (!text) { showModal("Peringatan", "Catatan masih kosong.", "⚠️"); return; }
+            let doSave = () => {
                 let idx = allRaporDescriptions.findIndex(d => d.studentId === st.id && d.periodId === activePeriodId);
-                if (idx >= 0) allRaporDescriptions[idx].text = txt;
-                else allRaporDescriptions.push({ id: genId('RD'), studentId: st.id, periodId: activePeriodId, text: txt });
-                saveAllData();
-
-                btn.innerHTML = origText;
-                btn.disabled = false;
-            }, 1000);
+                if (idx >= 0) allRaporDescriptions[idx].text = text;
+                else allRaporDescriptions.push({ id: genId('RD'), studentId: st.id, periodId: activePeriodId, text });
+                saveAllData(); loadActiveContextData();
+                showModal("Tersimpan", "Catatan perkembangan disimpan.", "✅");
+            };
+            let old = allRaporDescriptions.find(d => d.studentId === st.id && d.periodId === activePeriodId);
+            if (old && old.text !== text) showConfirm("Catatan ini dipakai juga sebagai narasi rapor siswa tersebut. Timpa narasi yang sudah ada?", doSave);
+            else doSave();
         }

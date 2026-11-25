@@ -1,6 +1,6 @@
 # Point.md: Rencana dan Status Proyek "Sistem Administrasi Guru Terpadu"
 
-Dokumen ini ringkasan lengkap untuk melanjutkan proyek di percakapan baru. Unggah bersama zip aplikasi terbaru (`sistem-administrasi-guru-tahap4b.zip`) lalu minta asisten membaca `Point.md` dan `README.md` lebih dulu.
+Dokumen ini ringkasan lengkap untuk melanjutkan proyek di percakapan baru. Unggah bersama zip aplikasi terbaru (`sistem-administrasi-guru-tahap5.zip`) lalu minta asisten membaca `Point.md` dan `README.md` lebih dulu.
 
 ## 1. Latar dan tujuan
 
@@ -64,20 +64,20 @@ Aturan:
 | 3 | Analisis CP, Modul Ajar, Generate Soal, Kisi-kisi (soal kini punya kunci, pembahasan, TP, indikator) | Selesai |
 | 4 | Proyek P5, Modul P5, Tugas/LKPD (rubrik total 100%), tafsiran analisis ulangan, rekomendasi remedial/pengayaan | Selesai |
 | Tambahan | Konfigurasi bersama `app-config.js`, dropdown model + muat daftar dari Gemini, gaya ringkas terbatas, token per tugas | Selesai |
-| 5 | Lihat bagian 6 | **Berikutnya** |
-| 6 | Penguatan (bagian 7) | Belum |
+| 5 | Narasi rapor, laporan wali, isi surat memakai Gemini; tabel rapor per TP nyata; `HIDE_WHEN_OFF = true`; simulasi dihapus (bagian 6) | Selesai |
+| 6 | Penguatan (bagian 7) | **Berikutnya** |
 | 7 | Login dan multi-guru (bagian 8) | Belum |
 
-Pengujian terakhir: **108 uji unit** dan **174 uji browser** lulus. Jalankan:
+Pengujian terakhir: **117 uji unit** dan **198 uji browser** (tanpa file asli) lulus. Jalankan:
 ```
 node --test tests/unit/*.test.js
 python3 tests/run_tests.py [path/ke/file_asli.html]
 ```
 Uji browser butuh `pip install playwright` + Chromium, memakai server HTTP lokal (jangan `file://`: localStorage Chromium di `file://` tidak konsisten antar muat ulang) dan menggantikan Gemini serta Apps Script dengan tiruan. **Belum ada uji dengan Gemini asli di otomatisasi**; pembuktian nyata adalah tombol Uji Koneksi dan pemakaian oleh guru.
 
-## 6. Tahap 5: narasi rapor, laporan wali, surat (berikutnya)
+## 6. Tahap 5: narasi rapor, laporan wali, surat (SELESAI)
 
-Yang masih simulasi: `generateAllNarration` (rapor.js), `generateProgressAI` (communication.js), `generateDocAI` (documents.js).
+Dulu simulasi (kini tersambung ke Gemini): `generateAllNarration` (rapor.js), `generateProgressAI` (communication.js), `generateDocAI` (documents.js).
 - **AI-9 Narasi rapor:** per batch 10 siswa, hanya kode anonim + nilai akhir + predikat + TP tuntas/belum + kehadiran; nama dipulihkan lokal. Teks bisa diedit per siswa dan hanya tersimpan (`allRaporDescriptions`) setelah disetujui (FR-61). Siswa nilai belum lengkap tidak diberi narasi capaian. Jangan menyebut "tuntas" bila belum.
 - **AI-10 Laporan perkembangan wali:** nilai, tren, kehadiran per siswa (kode anonim), nada hangat dan konstruktif, tanpa diagnosis psikologis/medis.
 - **AI-11 Isi surat:** AI hanya mengisi isi; nomor surat, kop, tanda tangan dari aplikasi. Alasan diambil dari data absensi/nilai.
@@ -85,7 +85,7 @@ Yang masih simulasi: `generateAllNarration` (rapor.js), `generateProgressAI` (co
 - Perbaiki di rapor: tabel per-TP saat ini menampilkan nilai akhir yang sama untuk tiap TP (palsu); ganti dengan data nyata per asesmen berkait TP atau hapus kolom.
 - Tambah uji pola yang sama (build/validate unit; browser: draf -> setuju -> simpan, nol permintaan bila AI belum siap, tanpa nama/NIS di permintaan, XSS pada keluaran AI).
 
-## 7. Tahap 6: penguatan
+## 7. Tahap 6: penguatan (berikutnya)
 
 - Migrasi `Store` ke IndexedDB (batas localStorage ±5 MB; sekarang hanya ada peringatan 80%). Antarmuka `Store` sudah memisahkan penyimpanan fisik.
 - Backup v2: berversi skema, mode gabung/timpa saat restore, pengingat 7 hari. Backup lama tetap harus bisa dipulihkan.
@@ -108,14 +108,16 @@ Yang masih simulasi: `generateAllNarration` (rapor.js), `generateProgressAI` (co
 - Bagian "kebutuhan belajar" pada modul ajar adalah perkiraan umum dari AI (diberi penanda); guru wajib menyesuaikan.
 - PDF referensi dikirim apa adanya (tidak bisa disaring); privasi memperingatkan guru agar tidak mengunggah dokumen berisi data siswa. Dokumen teks/DOCX disaring (nama/NIS diganti kode).
 - Hapus kelas kini menghapus seluruh isinya (dulu meninggalkan data yatim). Konfirmasi menampilkan jumlahnya.
+- Tahap 5: narasi rapor hanya untuk siswa nilai akhir lengkap (status Sementara dilewati). Catatan laporan wali dan narasi rapor berbagi satu record (`allRaporDescriptions`); menyimpan catatan wali menimpa narasi rapor setelah konfirmasi. Tabel rapor per TP memakai rata-rata asesmen berkait TP; TP tanpa asesmen tampil "-".
+- `app-config.js` di repo berisi URL proxy dan token nyata (terkirim ke browser). Uji otomatis mengabaikannya. Ganti token bila repo dibagikan.
 - Dasbor: grafik "Pengayaan" masih tetap 0 (belum dihitung dari tindak lanjut).
 - File `.doc` lama ditolak (hanya PDF, DOCX, TXT).
 
 ## 10. Cara melanjutkan di percakapan baru
 
-1. Unggah `sistem-administrasi-guru-tahap4b.zip` dan `Point.md`. Jika file asli prototipe tersedia, unggah juga untuk uji paritas.
+1. Unggah `sistem-administrasi-guru-tahap5.zip` dan `Point.md`. Jika file asli prototipe tersedia, unggah juga untuk uji paritas.
 2. Pesan pembuka yang disarankan:
 
-> Lanjutkan proyek "Sistem Administrasi Guru Terpadu". Baca Point.md dan README.md di zip yang saya unggah. Ekstrak, jalankan `node --test tests/unit/*.test.js` dan `python3 tests/run_tests.py`, pastikan hijau, lalu kerjakan **Tahap 5** sesuai bagian 6. Ikuti konvensi bagian 3, tulis uji untuk setiap fitur baru, dan jangan mengubah perilaku yang sudah diuji tanpa alasan. Setelah selesai, kemas zip baru dan perbarui Point.md.
+> Lanjutkan proyek "Sistem Administrasi Guru Terpadu". Baca Point.md dan README.md di zip yang saya unggah. Ekstrak, jalankan `node --test tests/unit/*.test.js` dan `python3 tests/run_tests.py`, pastikan hijau, lalu kerjakan **Tahap 6** sesuai bagian 7. Ikuti konvensi bagian 3, tulis uji untuk setiap fitur baru, dan jangan mengubah perilaku yang sudah diuji tanpa alasan. Setelah selesai, kemas zip baru dan perbarui Point.md.
 
 3. Hasil uji Gemini asli (pesan Uji Koneksi, galat yang muncul) sebaiknya disertakan bila ada masalah koneksi.

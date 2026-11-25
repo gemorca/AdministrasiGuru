@@ -69,4 +69,3 @@
             };
             reader.readAsText(file);
         }
-

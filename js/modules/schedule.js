@@ -69,4 +69,3 @@
             }
             return `<div class="leading-relaxed">${esc(text)}</div>`;
         }
-

@@ -494,4 +494,3 @@
             
             showModal("Berhasil", "Naskah soal berhasil diunduh dengan tabel rapi untuk soal Menjodohkan dan Benar-Salah.", "✅");
         }
-

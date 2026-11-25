@@ -53,4 +53,3 @@
             "Rekayasa dan Teknologi": ["Desain Alat Penjernih Air", "Smart Farming Sederhana", "Robotika Dasar", "Aplikasi/Web Informasi Sekolah", "Lainnya..."],
             "Kewirausahaan": ["Bazar Produk Inovatif", "Koperasi Siswa", "Budidaya Tanaman Hias", "Kerajinan Bernilai Jual", "Lainnya..."]
         };
-

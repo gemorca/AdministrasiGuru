@@ -4,7 +4,7 @@
  */
 const AIUI = (() => {
     // Diaktifkan di Tahap 3, setelah fitur AI benar-benar tersambung ke Gemini.
-    const HIDE_WHEN_OFF = false;
+    const HIDE_WHEN_OFF = true;
     const MODEL_RE = /^gemini-[a-z0-9][a-z0-9.\-]{0,60}$/;
     const $ = id => document.getElementById(id);
 

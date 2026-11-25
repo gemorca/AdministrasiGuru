@@ -539,7 +539,164 @@ const AITasks = (() => {
             return p;
         }
     };
-    return { cp, soal, modul, p5, p5modul, asg, interp, followup, LEVELS, LEVEL_LABEL, TYPES, PREFIX, DIFFS, MAX_BATCH, refBlock, oneLine };
+
+    // =====================================================================
+    // Bantuan bersama Tahap 5 (rapor, laporan wali, surat): murni, tanpa DOM
+    // =====================================================================
+    const CODE_RE = /\[[SW]\d{2,3}\]/g;
+    const DIAG_RE = /\b(depresi|autis\w*|adhd|disleksia|diskalkulia|skizofreni\w*|bipolar|gangguan (jiwa|mental|kecemasan|perilaku|belajar)|trauma\w*|psikolog\w*|psikiater|psikosis|retardasi|down syndrome|epilepsi|kecemasan klinis|diagnosis|didiagnosis)\b/i;
+    const URL_RE = /(https?:\/\/|www\.|\b[a-z0-9-]+\.(com|id|net|org|co|io)\b)/i;
+    /** "tuntas" dipakai tanpa penyangkal ("belum"/"tidak"/"bukan") di depannya. */
+    function claimsPassed(t) { return /(?<!belum\s)(?<!tidak\s)(?<!bukan\s)\b(telah |sudah )?(menuntaskan|tuntas)\b/i.test(t); }
+    function claimsNotPassed(t) { return /\b(belum|tidak|bukan)\s+(mencapai|tuntas|menuntaskan|memenuhi|lulus)\b/i.test(t); }
+    function foreignCodes(text, allowed) { return (String(text).match(CODE_RE) || []).filter(c => !allowed.has(c)); }
+
+    /** Tren dari urutan nilai kronologis: 'naik' | 'turun' | 'stabil' | 'belum cukup data'. Ambang selisih 5 poin. */
+    function trendOf(values) {
+        const v = (values || []).filter(x => typeof x === 'number' && isFinite(x));
+        if (v.length < 2) return 'belum cukup data';
+        const h = Math.floor(v.length / 2);
+        const avg = a => a.reduce((x, y) => x + y, 0) / a.length;
+        const d = avg(v.slice(v.length - h)) - avg(v.slice(0, h));
+        return d >= 5 ? 'naik' : d <= -5 ? 'turun' : 'stabil';
+    }
+
+    // =====================================================================
+    // AI-9  Narasi rapor (deskripsi capaian) per siswa, batch 10, kode anonim
+    // =====================================================================
+    const rapor = {
+        schema: {
+            type: 'object',
+            required: ['narasi'],
+            properties: {
+                narasi: { type: 'array', minItems: 1, maxItems: 12, items: { type: 'object', required: ['kode', 'teks'], properties: { kode: str(3), teks: str(60) } } }
+            }
+        },
+        BATCH: 10,
+        MAX_CHARS: 700,
+        build({ rows, ctx }) {
+            const tpTxt = l => l.length ? l.map(t => `${t.code} (${oneLine(t.description).slice(0, 90)})`).join('; ') : '-';
+            const lines = rows.map(r => `${r.code} | nilai akhir: ${r.final} | predikat: ${r.pred} | status: ${r.passed ? 'Tuntas' : 'Belum Tuntas'} | kehadiran: ${r.attPct}% | TP tercapai: ${tpTxt(r.tpOk)} | TP belum tercapai: ${tpTxt(r.tpWeak)}`).join('\n');
+            const prompt = [
+                `Susun deskripsi capaian kompetensi untuk rapor mata pelajaran ${ctx.subject} (Fase ${ctx.fase}). KKTP = ${ctx.kktp}.`,
+                'Data siswa (memakai kode, tanpa nama):', lines,
+                'Aturan:',
+                '- Satu narasi untuk SETIAP kode, tepat sekali. Gunakan kode persis seperti diberikan, termasuk tanda kurung siku, dan hanya kode itu sendiri.',
+                '- 2-4 kalimat, nada positif dan profesional. Awali dengan \"Ananda [kode]\".',
+                '- Status Tuntas: boleh menyebut ketuntasan. Status Belum Tuntas: JANGAN memakai kata tuntas tanpa \"belum\"; sebut TP yang perlu dikuatkan.',
+                '- Sebut hanya TP, nilai, dan kehadiran yang diberikan. Jangan mengarang kegiatan, sikap, atau data lain.',
+                '- Tanpa diagnosis psikologis atau medis. Bahasa Indonesia baku.'
+            ].join('\n');
+            return { prompt, schema: rapor.schema, temperature: 0.5, maxTokens: 6000, system: 'Anda guru yang menulis deskripsi capaian rapor yang jujur sesuai data.', validate: d => rapor.validate(d, rows) };
+        },
+        validate(d, rows) {
+            const p = [];
+            const byCode = new Map(rows.map(r => [r.code, r]));
+            const allowed = new Set(byCode.keys());
+            const seen = new Set();
+            for (const n of d.narasi) {
+                const r = byCode.get(n.kode);
+                if (!r) { p.push(`kode ${n.kode} tidak ada dalam permintaan`); continue; }
+                if (seen.has(n.kode)) p.push(`kode ${n.kode} muncul lebih dari sekali`);
+                seen.add(n.kode);
+                const t = String(n.teks);
+                if (t.length > rapor.MAX_CHARS) p.push(`kode ${n.kode}: teks terlalu panjang (maksimal ${rapor.MAX_CHARS} karakter)`);
+                const other = foreignCodes(t, new Set([n.kode]));
+                if (other.length) p.push(`kode ${n.kode}: teks menyebut kode siswa lain`);
+                if (r.passed && claimsNotPassed(t)) p.push(`kode ${n.kode}: siswa TUNTAS, teks tidak boleh menyebut belum tuntas`);
+                if (!r.passed && claimsPassed(t)) p.push(`kode ${n.kode}: siswa BELUM TUNTAS, teks tidak boleh menyebut tuntas`);
+                if (DIAG_RE.test(t)) p.push(`kode ${n.kode}: teks memuat istilah diagnosis`);
+                if (URL_RE.test(t)) p.push(`kode ${n.kode}: teks memuat tautan`);
+            }
+            for (const c of allowed) if (!seen.has(c)) p.push(`kode ${c} belum diberi narasi`);
+            return p;
+        }
+    };
+
+    // =====================================================================
+    // AI-10  Laporan perkembangan untuk wali (satu siswa)
+    // =====================================================================
+    const progress = {
+        schema: { type: 'object', required: ['laporan'], properties: { laporan: str(80) } },
+        MAX_CHARS: 1200,
+        build({ row, ctx }) {
+            const tasks = row.taskTotal ? `${row.taskDone} dari ${row.taskTotal} tugas terkumpul` : 'belum ada tugas pada periode ini';
+            const data = [
+                `Siswa: ${row.code}`,
+                row.final === null ? `Nilai akhir: belum lengkap (komponen kosong: ${(row.missing || []).join(', ') || '-'})` : `Nilai akhir: ${row.final} (predikat ${row.pred}), status ${row.passed ? 'Tuntas' : 'Belum Tuntas'}, KKTP ${ctx.kktp}`,
+                `Tren nilai formatif dan sumatif: ${row.trend}`,
+                `Kehadiran: ${row.attPct}% (hadir ${row.H}, sakit ${row.S}, izin ${row.I}, alpa ${row.A})`,
+                `Tugas: ${tasks}`
+            ].join('\n');
+            const prompt = [
+                `Tulis catatan perkembangan belajar untuk orang tua/wali pada mata pelajaran ${ctx.subject}. Nada hangat, jelas, konstruktif.`,
+                'Data (siswa memakai kode, tanpa nama):', data,
+                'Aturan:',
+                `- 3-6 kalimat dalam satu paragraf. Awali dengan \"Ananda ${row.code}\". Gunakan kode itu persis seperti diberikan.`,
+                '- Sebut hanya angka dan fakta di atas. Jangan mengarang kejadian, sikap, atau penyebab.',
+                '- Bila nilai akhir belum lengkap, katakan capaian belum dapat disimpulkan; jangan menyebut tuntas atau belum tuntas.',
+                '- Bila belum tuntas atau kehadiran rendah, beri 1-2 saran dukungan konkret di rumah. Bila tuntas, beri apresiasi.',
+                '- Tanpa diagnosis psikologis atau medis, tanpa menyalahkan siswa atau orang tua. Bahasa Indonesia baku.'
+            ].join('\n');
+            return { prompt, schema: progress.schema, temperature: 0.5, maxTokens: 3000, system: 'Anda guru yang berkomunikasi dengan orang tua secara empatik dan jujur.', validate: d => progress.validate(d, row) };
+        },
+        validate(d, row) {
+            const p = [];
+            const t = String(d.laporan);
+            if (t.length > progress.MAX_CHARS) p.push(`teks terlalu panjang (maksimal ${progress.MAX_CHARS} karakter)`);
+            if (foreignCodes(t, new Set([row.code])).length) p.push('teks menyebut kode siswa lain');
+            if (DIAG_RE.test(t)) p.push('teks memuat istilah diagnosis');
+            if (URL_RE.test(t)) p.push('teks memuat tautan');
+            if (row.final === null) { if (claimsPassed(t) || claimsNotPassed(t)) p.push('nilai akhir belum lengkap: jangan menyebut tuntas atau belum tuntas'); }
+            else if (row.passed && claimsNotPassed(t)) p.push('siswa TUNTAS: teks tidak boleh menyebut belum tuntas');
+            else if (!row.passed && claimsPassed(t)) p.push('siswa BELUM TUNTAS: teks tidak boleh menyebut tuntas');
+            return p;
+        }
+    };
+
+    // =====================================================================
+    // AI-11  Isi surat (hanya isi; nomor, kop, tanggal, tanda tangan dari aplikasi)
+    // =====================================================================
+    const surat = {
+        schema: { type: 'object', required: ['isi'], properties: { isi: str(80) } },
+        MAX_CHARS: 1800,
+        build({ type, row, ctx }) {
+            const facts = [
+                `Kehadiran: ${row.attPct}% (hadir ${row.H}, sakit ${row.S}, izin ${row.I}, alpa ${row.A})`,
+                row.final === null ? 'Nilai akhir: belum lengkap' : `Nilai akhir: ${row.final} (predikat ${row.pred}), status ${row.passed ? 'Tuntas' : 'Belum Tuntas'}, KKTP ${ctx.kktp}`,
+                row.taskTotal ? `Tugas: ${row.taskDone} dari ${row.taskTotal} terkumpul` : 'Tugas: belum ada tugas pada periode ini'
+            ].join('\n');
+            const prompt = [
+                `Tulis ISI surat resmi sekolah kepada orang tua/wali. Jenis surat (perihal): ${oneLine(type)}. Mata pelajaran: ${ctx.subject}.`,
+                `Siswa dirujuk dengan kode ${row.code}; tulis \"ananda ${row.code}\" persis seperti itu.`,
+                'Data pendukung (boleh dipakai sebagai alasan, jangan menambah data lain):', facts,
+                'Aturan:',
+                '- Hanya isi: mulai dari \"Dengan hormat,\" lalu 2-3 paragraf dipisah satu baris kosong, akhiri kalimat penutup dan terima kasih.',
+                '- JANGAN menulis nomor surat, kop, tanggal, lampiran, \"Hormat kami\", nama atau tanda tangan: itu diisi aplikasi.',
+                '- JANGAN mengarang tanggal, jam, tempat, atau nama orang. Bila perlu pertemuan, tulis \"pada waktu yang akan kami informasikan kemudian\".',
+                '- Hanya sebut angka dari data pendukung. Nada sopan, tidak menyalahkan, tanpa diagnosis psikologis atau medis. Bahasa Indonesia baku.'
+            ].join('\n');
+            return { prompt, schema: surat.schema, temperature: 0.4, maxTokens: 3000, system: 'Anda staf tata usaha sekolah yang menulis surat resmi dengan sopan dan ringkas.', validate: d => surat.validate(d, row) };
+        },
+        validate(d, row) {
+            const p = [];
+            const t = String(d.isi);
+            if (t.length > surat.MAX_CHARS) p.push(`teks terlalu panjang (maksimal ${surat.MAX_CHARS} karakter)`);
+            if (!/^\s*dengan hormat/i.test(t)) p.push('harus diawali \"Dengan hormat,\"');
+            if (/(^|\n)\s*(nomor|no\.|perihal|lampiran|hal)\s*:/i.test(t)) p.push('jangan menulis nomor, perihal, atau lampiran surat');
+            if (/hormat kami|tertanda|kepala sekolah\s*$|nip\s*[:.]?\s*\d/i.test(t)) p.push('jangan menulis penutup tanda tangan atau NIP');
+            if (foreignCodes(t, new Set([row.code])).length) p.push('teks menyebut kode siswa lain');
+            if (DIAG_RE.test(t)) p.push('teks memuat istilah diagnosis');
+            if (URL_RE.test(t)) p.push('teks memuat tautan');
+            if (/\b\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\b|\bpukul\s+\d|\bjam\s+\d/i.test(t)) p.push('jangan mengarang tanggal atau jam');
+            return p;
+        },
+        /** Rapikan: kode -> nama dipulihkan oleh pemanggil; di sini hanya normalisasi spasi dan baris. */
+        normalize(text) {
+            return String(text).replace(/\r\n?/g, '\n').split('\n').map(l => l.replace(/[ \t]+$/g, '')).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+        }
+    };
+    return { cp, soal, modul, p5, p5modul, asg, interp, followup, rapor, progress, surat, trendOf, claimsPassed, claimsNotPassed, LEVELS, LEVEL_LABEL, TYPES, PREFIX, DIFFS, MAX_BATCH, refBlock, oneLine };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = AITasks;

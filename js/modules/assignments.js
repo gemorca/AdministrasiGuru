@@ -198,4 +198,3 @@
             document.getElementById('modalSubmissions').classList.add('hidden');
             showModal("Berhasil Disimpan", "Data pengumpulan, nilai, dan catatan tugas telah direkap.", "✅");
         }
-        
