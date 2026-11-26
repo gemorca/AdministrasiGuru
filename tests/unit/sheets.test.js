@@ -6,6 +6,9 @@ const vm = require('node:vm');
 const crypto = require('node:crypto');
 
 /** Spreadsheet tiruan di memori: cukup untuk menguji logika Sheets.gs tanpa Google. */
+const googleTokens = {};
+const gtok = (email, over = {}) => { const k = ('tok-' + email + '-' + Math.random()).padEnd(120, 'x'); googleTokens[k] = { aud: 'cid-123', email, email_verified: 'true', name: 'Nama Google', exp: String(Math.floor(Date.now() / 1000) + 3600), ...over }; return k; };
+
 function makeBackend(props = {}) {
     const sheets = {};
     const mkSheet = name => {
@@ -39,6 +42,7 @@ function makeBackend(props = {}) {
     const sandbox = {
         console, JSON, Date, Math, Object, Array, String, Number, parseInt, Error,
         Logger: { log() {} },
+        UrlFetchApp: { fetch: url => { const cred = decodeURIComponent(url.split('id_token=')[1]); const d = googleTokens[cred]; return { getResponseCode: () => d ? 200 : 400, getContentText: () => JSON.stringify(d || { error: 'invalid' }) }; } },
         ContentService: { MimeType: { JSON: 'json' }, createTextOutput: t => ({ text: t, setMimeType() { return this; } }) },
         SpreadsheetApp: { getActiveSpreadsheet: () => ss, openById: () => ss },
         PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in store ? store[k] : null), setProperty: (k, v) => { store[k] = String(v); } }) },
@@ -60,7 +64,7 @@ const reg = (b, over = {}) => b.call({ action: 'register', name: 'Budi', email: 
 
 test('register pertama menjadi admin, menyimpan nama sekolah, kata sandi tidak tersimpan polos', () => {
     const b = makeBackend();
-    assert.deepEqual(b.call({ action: 'status' }), { ok: true, hasUsers: false, needsCode: false, schoolName: '' });
+    assert.deepEqual(b.call({ action: 'status' }), { ok: true, hasUsers: false, needsCode: false, schoolName: '', googleClientId: '' });
     const r = reg(b);
     assert.equal(r.ok, true);
     assert.equal(r.role, 'admin');
@@ -220,4 +224,33 @@ test('admin: kelola anggota, reset sandi, peran terakhir terlindungi, anggota di
     assert.equal(b.call({ action: 'remove_member', token: admin.token, user_id: ani.user_id }).ok, true);
     assert.equal(b.call({ action: 'me', token: ch.token }).error, 'AUTH');
     assert.equal(b.call({ action: 'login', email: 'ani@mail.com', password: 'barubaru123' }).reason, 'BAD_CREDENTIALS');
+});
+
+test('google_login: verifikasi token, pendaftar pertama admin, guru baru butuh kode, akun lama langsung masuk', () => {
+    const b = makeBackend({ GOOGLE_CLIENT_ID: 'cid-123', REG_CODE: 'KODE' });
+    assert.equal(b.call({ action: 'status' }).googleClientId, 'cid-123');
+    assert.equal(b.call({ action: 'google_login', credential: 'palsu'.padEnd(120, 'x') }).reason, 'GOOGLE_INVALID');
+    assert.equal(b.call({ action: 'google_login', credential: gtok('a@mail.com', { aud: 'cid-lain' }) }).reason, 'GOOGLE_INVALID');
+    assert.equal(b.call({ action: 'google_login', credential: gtok('a@mail.com', { email_verified: 'false' }) }).reason, 'GOOGLE_INVALID');
+    assert.equal(b.call({ action: 'google_login', credential: gtok('a@mail.com', { exp: '1' }) }).reason, 'GOOGLE_INVALID');
+
+    const first = b.call({ action: 'google_login', credential: gtok('kepsek@mail.com') });
+    assert.equal(first.reason, 'SCHOOL_REQUIRED');
+    assert.equal(first.email, 'kepsek@mail.com');
+    const adm = b.call({ action: 'google_login', credential: gtok('kepsek@mail.com'), school: 'SMPN 9', name: 'Kepsek' });
+    assert.equal(adm.role, 'admin'); assert.equal(adm.school_name, 'SMPN 9');
+
+    assert.equal(b.call({ action: 'google_login', credential: gtok('guru@mail.com') }).reason, 'BAD_CODE');
+    const g = b.call({ action: 'google_login', credential: gtok('guru@mail.com'), code: 'KODE' });
+    assert.equal(g.role, 'teacher');
+    // masuk lagi tanpa kode; email sama dengan akun sandi juga bisa lewat Google
+    assert.equal(b.call({ action: 'google_login', credential: gtok('guru@mail.com') }).ok, true);
+    assert.equal(b.call({ action: 'google_login', credential: gtok('KEPSEK@mail.com') }).role, 'admin');
+    // akun Google tidak bisa dimasuki dengan menebak sandi
+    assert.equal(b.call({ action: 'login', email: 'guru@mail.com', password: 'apapun1234' }).reason, 'BAD_CREDENTIALS');
+});
+
+test('google_login tanpa GOOGLE_CLIENT_ID ditolak', () => {
+    const b = makeBackend();
+    assert.equal(b.call({ action: 'google_login', credential: gtok('a@mail.com') }).reason, 'GOOGLE_INVALID');
 });

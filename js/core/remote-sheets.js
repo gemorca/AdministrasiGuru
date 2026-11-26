@@ -75,6 +75,12 @@ const RemoteSheets = (() => {
                 token = env.token; lsSet(token);
                 return { ok: true, session: toSession(env) };
             },
+            async googleLogin(data) {
+                const env = await call({ action: 'google_login', ...data }, { noToken: true });
+                if (!env.ok) return env;
+                token = env.token; lsSet(token);
+                return { ok: true, session: toSession(env) };
+            },
             async getSession() {
                 if (!token) return null;
                 try {

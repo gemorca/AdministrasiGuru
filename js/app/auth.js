@@ -28,7 +28,8 @@ const Auth = (() => {
         NAME_REQUIRED: 'Nama lengkap wajib diisi.',
         PASSWORD_WEAK: 'Kata sandi minimal 8 karakter.',
         SCHOOL_REQUIRED: 'Nama sekolah wajib diisi oleh pendaftar pertama.',
-        BAD_CODE: 'Kode pendaftaran sekolah salah.'
+        BAD_CODE: 'Kode pendaftaran sekolah salah.',
+        GOOGLE_INVALID: 'Verifikasi Google gagal. Pastikan GOOGLE_CLIENT_ID di Apps Script sama dengan Client ID Anda, lalu coba lagi.'
     };
 
     let remote = null;
@@ -111,17 +112,89 @@ const Auth = (() => {
         if (note) note.classList.toggle('hidden', !!regStatus.hasUsers);
         const school = $('authSchoolLabel');
         if (school) school.innerText = regStatus.schoolName || '';
+        renderGoogle();
+    }
+
+    // ---------- Masuk dengan Google (Google Identity Services) ----------
+    let pendingGoogle = null; // { credential } saat akun Google baru perlu melengkapi pendaftaran
+    let gisReady = false;
+    function googleClientId() {
+        return String(regStatus.googleClientId || (window.APP_CONFIG && window.APP_CONFIG.googleClientId) || '').trim();
+    }
+    function loadGis() {
+        return new Promise((resolve, reject) => {
+            if (window.google && window.google.accounts && window.google.accounts.id) return resolve();
+            const s = document.createElement('script');
+            s.src = 'https://accounts.google.com/gsi/client';
+            s.async = true;
+            s.onload = () => resolve();
+            s.onerror = () => { s.remove(); reject(new Error('Gagal memuat layanan Google.')); };
+            document.head.appendChild(s);
+        });
+    }
+    async function renderGoogle() {
+        const cid = googleClientId();
+        const rows = document.querySelectorAll('.googleRow');
+        if (!cid) { rows.forEach(r => r.classList.add('hidden')); return; }
+        // Tombol Google hanya bekerja dari http(s) (bukan file://) dan origin harus terdaftar di Google Cloud.
+        if (!/^https?:$/.test(location.protocol)) { rows.forEach(r => r.classList.add('hidden')); return; }
+        try { await loadGis(); } catch (_) { rows.forEach(r => r.classList.add('hidden')); return; }
+        if (!gisReady) {
+            window.google.accounts.id.initialize({ client_id: cid, callback: onGoogleCredential, ux_mode: 'popup' });
+            gisReady = true;
+        }
+        rows.forEach(r => {
+            r.classList.toggle('hidden', r.id === 'regGoogleRow' && !!pendingGoogle);
+            const box = r.querySelector('.google-btn');
+            if (box && !box.dataset.rendered) {
+                const w = Math.min(320, Math.max(220, (box.parentElement.clientWidth || 300)));
+                window.google.accounts.id.renderButton(box, { type: 'standard', theme: 'outline', size: 'large', text: 'continue_with', shape: 'pill', width: w, locale: 'id' });
+                box.dataset.rendered = '1';
+            }
+        });
+    }
+
+    async function onGoogleCredential(resp) {
+        if (!remote || !resp || !resp.credential) return;
+        formMsg('authLoginError', ''); formMsg('authRegError', '');
+        const prevPanel = !$('authPanelRegister').classList.contains('hidden') ? 'authRegError' : 'authLoginError';
+        try {
+            const res = await remote.googleLogin({ credential: resp.credential });
+            if (res && res.ok) { pendingGoogle = null; await processAuthenticatedSession(res.session); return; }
+            if (res && (res.reason === 'SCHOOL_REQUIRED' || res.reason === 'BAD_CODE')) {
+                pendingGoogle = { credential: resp.credential };
+                await showRegister({ google: { email: res.email, name: res.name } });
+                return;
+            }
+            formMsg(prevPanel, REASONS[res && res.reason] || 'Gagal masuk dengan Google.');
+        } catch (err) {
+            formMsg(prevPanel, err && err.message ? err.message : 'Gagal masuk dengan Google.');
+        }
+    }
+
+    function setGoogleRegisterMode(info) {
+        const on = !!info;
+        $('regPwRows').classList.toggle('hidden', on);
+        ['regPassword', 'regPassword2'].forEach(id => { const el = $(id); el.required = !on; });
+        $('regGoogleNote').classList.toggle('hidden', !on);
+        const email = $('regEmail');
+        email.readOnly = on;
+        if (on) { email.value = info.email || ''; if (info.name && !$('regName').value) $('regName').value = info.name; }
     }
 
     function showLogin() {
+        pendingGoogle = null;
+        setGoogleRegisterMode(null);
         formMsg('authLoginError', '');
         showGatePanel('authPanelLogin');
         const el = $('loginEmail');
         if (el) el.focus();
     }
 
-    async function showRegister() {
+    async function showRegister(opts) {
         formMsg('authRegError', '');
+        if (!(opts && opts.google)) pendingGoogle = null;
+        setGoogleRegisterMode(opts && opts.google);
         showGatePanel('authPanelRegister');
         await refreshRegStatus();
     }
@@ -207,19 +280,19 @@ const Auth = (() => {
         const pw2 = $('regPassword2').value || '';
         const btn = $('btnRegister');
         formMsg('authRegError', '');
-        if (pw.length < 8) { formMsg('authRegError', REASONS.PASSWORD_WEAK); return; }
-        if (pw !== pw2) { formMsg('authRegError', 'Konfirmasi kata sandi tidak sama.'); return; }
+        if (!pendingGoogle && pw.length < 8) { formMsg('authRegError', REASONS.PASSWORD_WEAK); return; }
+        if (!pendingGoogle && pw !== pw2) { formMsg('authRegError', 'Konfirmasi kata sandi tidak sama.'); return; }
         if (btn) { btn.disabled = true; btn.innerText = 'Mendaftarkan...'; }
         try {
-            const res = await remote.register({
-                name, email, password: pw,
-                code: ($('regCode').value || '').trim(),
-                school: ($('regSchool').value || '').trim()
-            });
+            const extra = { code: ($('regCode').value || '').trim(), school: ($('regSchool').value || '').trim() };
+            const res = pendingGoogle
+                ? await remote.googleLogin({ credential: pendingGoogle.credential, name, ...extra })
+                : await remote.register({ name, email, password: pw, ...extra });
             if (!res || !res.ok) {
                 formMsg('authRegError', REASONS[res && res.reason] || 'Pendaftaran gagal.');
                 return;
             }
+            pendingGoogle = null;
             $('regPassword').value = ''; $('regPassword2').value = '';
             await processAuthenticatedSession(res.session);
         } catch (err) {

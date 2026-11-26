@@ -164,6 +164,7 @@ function handleSheets_(req) {
     if (a === 'status') return actStatus_();
     if (a === 'register') return actRegister_(req);
     if (a === 'login') return actLogin_(req);
+    if (a === 'google_login') return actGoogle_(req);
     var user = userFromToken_(req.token);
     if (!user) return { ok: false, error: 'AUTH' };
     switch (a) {
@@ -191,7 +192,52 @@ function handleSheets_(req) {
 
 // ---------- autentikasi ----------
 function actStatus_() {
-  return { ok: true, hasUsers: allUsers_().length > 0, needsCode: !!PropertiesService.getScriptProperties().getProperty('REG_CODE'), schoolName: cfgGet_('school_name') };
+  return { ok: true, hasUsers: allUsers_().length > 0, needsCode: !!PropertiesService.getScriptProperties().getProperty('REG_CODE'), schoolName: cfgGet_('school_name'),
+    googleClientId: PropertiesService.getScriptProperties().getProperty('GOOGLE_CLIENT_ID') || '' };
+}
+
+/** Verifikasi ID token Google (dikirim browser dari Google Identity Services). Mengembalikan {email,name} atau null. */
+function verifyGoogle_(credential) {
+  var cid = PropertiesService.getScriptProperties().getProperty('GOOGLE_CLIENT_ID');
+  credential = String(credential || '');
+  if (!cid || credential.length < 100 || credential.length > 4000) return null;
+  var r = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(credential), { muteHttpExceptions: true });
+  if (r.getResponseCode() !== 200) return null;
+  var d;
+  try { d = JSON.parse(r.getContentText()); } catch (e) { return null; }
+  if (!d || d.aud !== cid || String(d.email_verified) !== 'true' || !d.email) return null;
+  if (Number(d.exp) * 1000 < Date.now()) return null;
+  var email = String(d.email).toLowerCase();
+  return { email: email, name: str_(d.name || email.split('@')[0], 80) };
+}
+
+function actGoogle_(req) {
+  var g = verifyGoogle_(req.credential);
+  if (!g) return { ok: false, reason: 'GOOGLE_INVALID' };
+  var regCode = PropertiesService.getScriptProperties().getProperty('REG_CODE');
+  return withLock_(function () {
+    var users = allUsers_(), u = null;
+    for (var i = 0; i < users.length; i++) if (users[i].email === g.email && users[i].status !== 'removed') u = users[i];
+    if (u) { // email Google terverifikasi = pemilik akun
+      sheet_(SH_.USERS, USER_HEAD_).getRange(u.row, 9).setValue(new Date().toISOString());
+      return Object.assign({ ok: true, token: createSession_(u.id) }, meOf_(u));
+    }
+    var name = str_(req.name, 80) || g.name, role = 'teacher';
+    if (users.length === 0) {
+      var school = str_(req.school, 120);
+      if (!school) return { ok: false, reason: 'SCHOOL_REQUIRED', email: g.email, name: g.name };
+      cfgSet_('school_name', school);
+      role = 'admin';
+    } else {
+      var inv = findInvite_(g.email);
+      if (regCode && !inv && !safeEquals_(String(req.code || ''), regCode)) return { ok: false, reason: 'BAD_CODE', email: g.email, name: g.name };
+      if (inv) { role = inv.role; markInviteClaimed_(inv); }
+    }
+    var salt = newSalt_(), id = 'U-' + Utilities.getUuid().slice(0, 12);
+    // Kata sandi acak tak diketahui siapa pun: akun ini masuk lewat Google (Admin bisa reset bila perlu sandi).
+    sheet_(SH_.USERS, USER_HEAD_).appendRow([id, g.email, name, role, salt, hashPw_(randToken_(), salt), 'active', new Date().toISOString(), '']);
+    return Object.assign({ ok: true, token: createSession_(id) }, meOf_({ id: id, email: g.email, name: name, role: role }));
+  });
 }
 
 function actRegister_(req) {

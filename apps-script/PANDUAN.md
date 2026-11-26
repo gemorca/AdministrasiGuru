@@ -35,6 +35,22 @@ Guru lain: Daftar (dengan `REG_CODE` bila dipakai) dan otomatis menjadi **Guru M
 
 Admin dapat di **Pengaturan > Anggota Sekolah**: menetapkan peran lebih dulu untuk sebuah email (mis. wakil jadi Admin), menjadikan guru Admin/Guru, **Reset Sandi** (menghasilkan kata sandi sementara), dan mengeluarkan anggota. Setiap pengguna dapat mengubah kata sandinya sendiri di Pengaturan.
 
+## 6. (Opsional) Masuk dengan Google
+Tombol Google muncul di halaman Masuk/Daftar bila `GOOGLE_CLIENT_ID` diisi.
+
+1. Buka <https://console.cloud.google.com/> dan buat/pilih project.
+2. **APIs & Services > OAuth consent screen**: pilih *External*, isi nama aplikasi dan email, simpan. Biarkan mode *Testing* bila hanya untuk sekolah Anda lalu tambahkan email guru di *Test users* (maks. 100), atau klik *Publish app* agar semua akun Google bisa masuk (untuk scope dasar email/profil tidak perlu verifikasi).
+3. **Credentials > Create Credentials > OAuth client ID** > *Web application*.
+4. **Authorized JavaScript origins**: isi alamat tempat aplikasi di-host, mis. `https://namasekolah.github.io` atau `http://localhost:8080` (tanpa garis miring di akhir dan tanpa path). Kosongkan *redirect URIs*.
+5. Salin **Client ID** (berakhiran `.apps.googleusercontent.com`).
+6. Di Apps Script, tambahkan Script property `GOOGLE_CLIENT_ID` = Client ID tadi. Tidak perlu deploy ulang.
+
+Catatan:
+- **Tidak berfungsi bila `index.html` dibuka langsung (`file://`)**. Host di GitHub Pages / Netlify / Vercel, atau jalankan `npx serve` / `python -m http.server 8080` lalu buka `http://localhost:8080`.
+- Server memverifikasi token Google (audience, email terverifikasi, masa berlaku) sebelum membuat sesi.
+- Pendaftar pertama lewat Google tetap menjadi Admin dan diminta nama sekolah. Guru baru tetap harus memasukkan `REG_CODE` (bila diisi) satu kali.
+- Bila email Google sama dengan akun yang sudah ada (daftar dengan sandi), keduanya masuk ke akun yang sama.
+
 ## Keamanan
 - Kata sandi disimpan sebagai hash SHA-256 bergaram (1000 putaran); token sesi hanya disimpan sebagai hash.
 - 6 kali salah sandi mengunci email itu 15 menit.
