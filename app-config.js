@@ -13,7 +13,7 @@
  * berkas ini dapat dibaca siapa pun. Pada Mode 1 token tidak diperlukan.
  */
 window.APP_CONFIG = window.APP_CONFIG || {
-    sheetsUrl: 'https://script.google.com/macros/s/AKfycbx0yZF2QmN1Rt29Sshsnv6bvtAks946pT2drwjUJ7Ix-YWW6WDuxtTTfLaZo0ZysPq4VQ/exec',
+    sheetsUrl: 'https://script.google.com/macros/s/AKfycbycIdUcXSQNJ0g_2X2hm1oBK-Df7Z9DjILseHRROdDv19SBCrFAh2SYMRsWaD0jCNXIpg/exec',
     ai: {
         proxyUrl: '',                       // kosong = pakai sheetsUrl (Mode 1)
         token: '',                          // hanya untuk Mode 2
