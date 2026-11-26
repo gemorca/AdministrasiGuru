@@ -274,3 +274,26 @@ test('update_profile: memperbarui nama pengguna dan hanya admin yang dapat mengu
     assert.equal(upAdmin.name, 'Budi Santoso, M.Pd.');
     assert.equal(upAdmin.school_name, 'SMP Negeri 2 Maju');
 });
+
+test('google_login: ubah kata sandi pertama kali tanpa sandi saat ini, perubahan kedua wajib sandi saat ini', () => {
+    const b = makeBackend({ GOOGLE_CLIENT_ID: 'cid-123' });
+    const g = b.call({ action: 'google_login', credential: gtok('guru.google@mail.com'), school: 'SMPN 1', name: 'Guru Google' });
+    assert.equal(g.ok, true);
+    assert.equal(g.has_password, false);
+    assert.equal(b.call({ action: 'me', token: g.token }).has_password, false);
+
+    // Pertama kali membuat sandi: tidak perlu oldPassword
+    const firstSet = b.call({ action: 'change_password', token: g.token, oldPassword: '', newPassword: 'sandibaru123' });
+    assert.equal(firstSet.ok, true);
+    assert.equal(firstSet.has_password, true);
+    assert.equal(b.call({ action: 'me', token: g.token }).has_password, true);
+
+    // Kini bisa masuk lewat email + sandi
+    assert.equal(b.call({ action: 'login', email: 'guru.google@mail.com', password: 'sandibaru123' }).ok, true);
+
+    // Perubahan kedua dan seterusnya: WAJIB mengisi oldPassword yang benar
+    assert.equal(b.call({ action: 'change_password', token: g.token, oldPassword: '', newPassword: 'sandikedua456' }).reason, 'BAD_CREDENTIALS');
+    assert.equal(b.call({ action: 'change_password', token: g.token, oldPassword: 'salah', newPassword: 'sandikedua456' }).reason, 'BAD_CREDENTIALS');
+    assert.equal(b.call({ action: 'change_password', token: g.token, oldPassword: 'sandibaru123', newPassword: 'sandikedua456' }).ok, true);
+    assert.equal(b.call({ action: 'login', email: 'guru.google@mail.com', password: 'sandikedua456' }).ok, true);
+});

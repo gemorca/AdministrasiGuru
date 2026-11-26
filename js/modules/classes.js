@@ -22,10 +22,10 @@
                         <td class="p-3 text-center font-bold text-blue-600">${count} Siswa</td>
                         <td class="p-3 text-center"><span class="px-2 py-1 bg-emerald-50 text-emerald-700 text-xs font-bold rounded">Aktif</span></td>
                         <td class="p-3 text-center">
-                            <div class="flex justify-center gap-1">
-                                <button onclick="changeGlobalClass('${c.classId}'); switchView('dashboard');" class="bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-blue-700 transition">Pilih Aktif</button>
-                                <button data-admin-only onclick="openModalClass('${c.classId}')" class="text-blue-600 font-bold text-xs bg-blue-50 px-2.5 py-1 rounded-lg hover:bg-blue-100 transition ${hideAct}">✏️</button>
-                                <button data-admin-only onclick="deleteClass('${c.classId}')" class="text-red-600 font-bold text-xs bg-red-50 px-2.5 py-1 rounded-lg hover:bg-red-100 transition ${hideAct}">🗑️</button>
+                            <div class="flex justify-center gap-1.5">
+                                <button onclick="changeGlobalClass('${c.classId}'); switchView('dashboard');" class="btn btn-primary py-1 px-3 text-xs">Pilih Aktif</button>
+                                <button data-admin-only onclick="openModalClass('${c.classId}')" class="btn btn-secondary py-1 px-2.5 text-xs ${hideAct}">Edit</button>
+                                <button data-admin-only onclick="deleteClass('${c.classId}')" class="btn btn-danger-outline py-1 px-2.5 text-xs ${hideAct}">Hapus</button>
                             </div>
                         </td>
                     </tr>

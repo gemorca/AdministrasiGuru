@@ -46,20 +46,20 @@
             let elWarn = document.getElementById('dWarnings');
             if (elWarn) {
                 if (!students.length) {
-                    elWarn.innerHTML = `<div class="text-xs text-slate-500 bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 text-center">Belum ada peserta didik di kelas aktif ini.</div>`;
+                    elWarn.innerHTML = `<div class="px-5 py-8 text-xs text-slate-500 text-center">Belum ada peserta didik terdaftar pada kelas aktif ini.</div>`;
                 } else if (!warnings.length) {
-                    elWarn.innerHTML = `<div class="text-xs text-emerald-800 bg-emerald-50/80 border border-emerald-200 rounded-xl p-3.5 flex items-center gap-2.5"><span class="text-base">✅</span><span>Tidak ada siswa dengan peringatan kehadiran maupun ketuntasan nilai saat ini.</span></div>`;
+                    elWarn.innerHTML = `<div class="px-5 py-8 text-xs text-slate-600 text-center">Seluruh siswa berada di atas batas kehadiran dan ketuntasan saat ini.</div>`;
                 } else {
                     elWarn.innerHTML = warnings.map(w => `
-                        <div class="flex items-center justify-between gap-3 p-3 rounded-xl border border-amber-200/80 bg-amber-50/50 text-xs">
+                        <div class="px-5 py-3 flex items-center justify-between gap-3 text-xs hover:bg-slate-50">
                             <div class="min-w-0">
-                                <span class="font-bold text-slate-800">${esc(w.student.name)}</span>
-                                <span class="text-slate-400 ml-1">(${esc(w.student.nis)})</span>
+                                <p class="font-medium text-slate-900 truncate">${esc(w.student.name)}</p>
+                                <p class="text-[11px] text-slate-500 tabular-nums">NISN ${esc(w.student.nis)}</p>
                             </div>
-                            <div class="flex items-center gap-1.5 flex-wrap justify-end">
-                                ${w.lowAtt ? `<span class="px-2 py-0.5 rounded-full font-bold bg-red-100 text-red-700">Hadir ${w.attPct}%</span>` : ''}
-                                ${w.lowScore ? `<span class="px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800">Nilai ${w.final}</span>` : ''}
-                                <button type="button" onclick="switchView('${w.lowScore ? 'remedial' : 'recap-attendance'}')" class="px-2.5 py-1 rounded-lg font-bold bg-white border border-slate-200 text-blue-700 hover:bg-blue-50 transition">Tindak Lanjut</button>
+                            <div class="flex items-center gap-1.5 flex-wrap justify-end flex-shrink-0">
+                                ${w.lowAtt ? `<span class="px-2 py-0.5 rounded bg-red-50 text-red-700 border border-red-200 font-medium tabular-nums">Hadir ${w.attPct}%</span>` : ''}
+                                ${w.lowScore ? `<span class="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-medium tabular-nums">Nilai ${w.final}</span>` : ''}
+                                <button type="button" onclick="switchView('${w.lowScore ? 'remedial' : 'recap-attendance'}')" class="btn btn-secondary py-1 px-2.5 text-[11px]">Tindak Lanjut</button>
                             </div>
                         </div>
                     `).join('');
@@ -76,25 +76,25 @@
                 chart1 = new Chart(ctx1.getContext('2d'), {
                     type: 'doughnut',
                     data: hasScoreData
-                        ? { labels: ['Tuntas', 'Belum Tuntas'], datasets: [{ data: [tuntasCount, validScores - tuntasCount], backgroundColor: ['#10b981', '#f43f5e'], borderWidth: 0, hoverOffset: 6 }] }
-                        : { labels: ['Belum Ada Nilai Akhir'], datasets: [{ data: [1], backgroundColor: ['#e2e8f0'], borderWidth: 0 }] },
-                    options: { responsive: true, maintainAspectRatio: false, cutout: '66%', plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 16, font: { size: 11, weight: '600' } } } } }
+                        ? { labels: ['Tuntas', 'Belum Tuntas'], datasets: [{ data: [tuntasCount, validScores - tuntasCount], backgroundColor: ['#15803d', '#dc2626'], borderWidth: 0, hoverOffset: 4 }] }
+                        : { labels: ['Belum Ada Nilai Akhir'], datasets: [{ data: [1], backgroundColor: ['#e5e7eb'], borderWidth: 0 }] },
+                    options: { responsive: true, maintainAspectRatio: false, cutout: '68%', plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 14, font: { size: 11, weight: '500' } } } } }
                 });
                 chart2 = new Chart(ctx2.getContext('2d'), {
                     type: 'bar',
                     data: {
-                        labels: ['Perlu Remedial', 'Tuntas Reguler', 'Pengayaan (A)'],
+                        labels: ['Remedial', 'Reguler', 'Pengayaan'],
                         datasets: [{
                             data: [validScores - tuntasCount, Math.max(0, tuntasCount - pengayaanCount), pengayaanCount],
-                            backgroundColor: ['#f43f5e', '#3b82f6', '#10b981'],
-                            borderRadius: 8,
-                            maxBarThickness: 48
+                            backgroundColor: ['#dc2626', '#1d4ed8', '#15803d'],
+                            borderRadius: 4,
+                            maxBarThickness: 36
                         }]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } },
+                        scales: { y: { beginAtZero: true, ticks: { precision: 0, font: { size: 11 } }, grid: { color: '#f3f4f6' } }, x: { ticks: { font: { size: 11 } }, grid: { display: false } } },
                         plugins: { legend: { display: false } }
                     }
                 });

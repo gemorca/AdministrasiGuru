@@ -1,12 +1,15 @@
 // js/app/ui.js
 // Dipecah dari sistem_administrasi_guru.html (Tahap 0). Skrip klasik: fungsi bersifat global.
-        function showModal(title, message, icon = "ℹ️") {
+        function showModal(title, message, icon = "") {
             let elTitle = document.getElementById('modalTitle');
             if(elTitle) elTitle.innerText = title;
             let elMsg = document.getElementById('modalMessage');
             if(elMsg) elMsg.innerText = message;
             let elIcon = document.getElementById('modalIcon');
-            if(elIcon) elIcon.innerText = icon;
+            if(elIcon) {
+                elIcon.innerText = '';
+                elIcon.classList.add('hidden');
+            }
             
             let modal = document.getElementById('customModal');
             if(modal) modal.classList.remove('hidden');
@@ -18,9 +21,15 @@
         }
 
         let confirmAction = null;
-        function showConfirm(message, action) {
+        function showConfirm(message, action, opts = {}) {
+            let elTitle = document.getElementById('confirmTitle');
+            if (elTitle) elTitle.innerText = (opts && opts.title) ? opts.title : 'Konfirmasi Tindakan';
             let elMsg = document.getElementById('confirmMessage');
             if(elMsg) elMsg.innerText = message;
+            let btnOk = document.getElementById('btnConfirmOk');
+            if (btnOk) btnOk.innerText = (opts && opts.confirmText) ? opts.confirmText : 'Ya, Lanjutkan';
+            let btnCancel = document.getElementById('btnConfirmCancel');
+            if (btnCancel) btnCancel.innerText = (opts && opts.cancelText) ? opts.cancelText : 'Batal';
             confirmAction = action;
             let modal = document.getElementById('modalConfirm');
             if(modal) modal.classList.remove('hidden');

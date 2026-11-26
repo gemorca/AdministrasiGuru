@@ -76,8 +76,8 @@
                     </td>
                     <td class="border border-slate-300 p-3 align-middle text-center no-print">
                         <div class="flex flex-col gap-1.5 justify-center items-center">
-                            <button onclick="openAnalisisCP('${cp.cpId}')" class="bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1.5 rounded-lg text-xs font-bold w-full transition border border-blue-200">✏️ Edit</button>
-                            <button onclick="deleteCPUnified('${cp.cpId}')" class="bg-red-100 text-red-700 hover:bg-red-200 px-3 py-1.5 rounded-lg text-xs font-bold w-full transition border border-red-200">🗑️ Hapus</button>
+                            <button onclick="openAnalisisCP('${cp.cpId}')" class="btn btn-secondary py-1 px-3 text-xs w-full">Edit</button>
+                            <button onclick="deleteCPUnified('${cp.cpId}')" class="btn btn-danger-outline py-1 px-3 text-xs w-full">Hapus</button>
                         </div>
                     </td>
                 </tr>

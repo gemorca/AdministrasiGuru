@@ -9,16 +9,16 @@
     <link rel="stylesheet" href="css/style.css">
     <!-- Chart.js CDN -->
     <script src="vendor/chart.umd.js" onerror="document.write('<script src=&quot;https://cdn.jsdelivr.net/npm/chart.js&quot;><\/script>')"></script>
-    <!-- Google Fonts: Inter -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
-        .view-section { display: none; animation: fadeIn 0.3s ease-in-out; }
+        .view-section { display: none; }
         .view-section.active { display: block; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
         ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: #f1f5f9; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-track { background: #f3f4f6; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         
         @media print {
@@ -38,144 +38,170 @@
 </head>
 <body class="text-slate-800 flex h-screen overflow-hidden bg-slate-50">
 
-    <!-- GERBANG LOGIN / REGISTER (Backend Google Spreadsheet; tersembunyi pada mode lokal) -->
-    <div id="authGate" class="auth-gate fixed inset-0 z-[80] hidden flex items-center justify-center p-4 no-print overflow-y-auto">
-        <div class="auth-card bg-white rounded-2xl p-5 sm:p-8 w-full max-w-md shadow-2xl border border-slate-100 space-y-5 my-auto">
-            <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
-                <div class="bg-blue-600 text-white p-3 rounded-xl text-2xl shadow">👨‍🏫</div>
-                <div>
-                    <h1 class="font-bold text-lg text-slate-800 leading-tight">Sistem Administrasi Guru</h1>
-                    <p class="text-xs text-slate-500 font-medium">Ruang Kerja Terpadu Sekolah <span id="authSchoolLabel" class="text-blue-600 font-semibold"></span></p>
-                </div>
-            </div>
-
-            <!-- Panel: Memuat -->
-            <div id="authPanelLoading" class="py-6 text-center space-y-3">
-                <div class="text-3xl animate-pulse">🔄</div>
-                <p id="authLoadingText" class="text-sm font-semibold text-slate-700">Menghubungkan ke Spreadsheet sekolah...</p>
-            </div>
-
-            <!-- Panel: Masuk -->
-            <form id="authPanelLogin" class="hidden space-y-4" onsubmit="Auth.submitLogin(event)" autocomplete="on">
-                <h2 class="font-bold text-slate-800">Masuk</h2>
-                <div id="authLoginError" class="hidden text-xs bg-red-50 text-red-700 border border-red-200 rounded-xl p-3"></div>
-                <div class="space-y-1">
-                    <label for="loginEmail" class="text-xs font-bold text-slate-600">Email</label>
-                    <input type="email" id="loginEmail" autocomplete="username" required placeholder="nama@email.com" class="auth-input w-full border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm">
-                </div>
-                <div class="space-y-1">
-                    <label for="loginPassword" class="text-xs font-bold text-slate-600">Kata Sandi</label>
-                    <div class="relative">
-                        <input type="password" id="loginPassword" autocomplete="current-password" required class="auth-input w-full border border-slate-200 pl-3.5 pr-24 py-2.5 rounded-xl text-sm">
-                        <button type="button" onclick="Auth.togglePassword('loginPassword', this)" class="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-bold text-blue-600 px-2 py-1">Tampilkan</button>
+    <!-- GERBANG AUTENTIKASI (Backend Google Spreadsheet; tersembunyi pada mode lokal) -->
+    <div id="authGate" class="auth-gate fixed inset-0 z-[80] hidden flex items-center justify-center p-4 sm:p-6 no-print overflow-y-auto">
+        <div class="auth-shell w-full max-w-4xl grid grid-cols-1 md:grid-cols-12 overflow-hidden my-auto">
+            <!-- Kolom Identitas (Desktop/Tablet) -->
+            <div class="auth-aside hidden md:flex md:col-span-5 p-8 flex-col justify-between">
+                <div class="space-y-6">
+                    <div class="inline-flex items-center gap-2.5">
+                        <span class="w-8 h-8 rounded-md bg-blue-600 text-white font-semibold text-xs flex items-center justify-center tracking-wider">AG</span>
+                        <span class="text-sm font-semibold tracking-tight text-white">Administrasi Guru</span>
+                    </div>
+                    <div class="space-y-3 pt-4">
+                        <h1 class="text-xl font-semibold leading-snug text-white">Ruang kerja kurikulum, penilaian, dan pelaporan kelas.</h1>
+                        <p class="text-xs text-slate-400 leading-relaxed">Kelola Capaian Pembelajaran, perangkat ajar, presensi harian, analisis butir soal, hingga pencetakan rapor Kurikulum Merdeka dalam satu basis data sekolah.</p>
                     </div>
                 </div>
-                <button type="submit" id="btnLogin" class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm shadow transition">Masuk</button>
-                <div class="googleRow hidden space-y-3">
-                    <div class="flex items-center gap-3 text-[11px] text-slate-400"><span class="flex-1 border-t border-slate-200"></span>atau<span class="flex-1 border-t border-slate-200"></span></div>
-                    <div class="google-btn flex justify-center min-h-[44px]"></div>
+                <div class="pt-6 border-t border-slate-800 text-[11px] text-slate-400 space-y-1">
+                    <div id="authSchoolLabel" class="font-medium text-slate-200"></div>
+                    <p>Tersinkron ke Google Spreadsheet satuan pendidikan.</p>
                 </div>
-                <p class="text-xs text-slate-500 text-center">Belum punya akun? <button type="button" onclick="Auth.showRegister()" class="font-bold text-blue-600 hover:underline">Daftar di sini</button></p>
-            </form>
+            </div>
 
-            <!-- Panel: Daftar -->
-            <form id="authPanelRegister" class="hidden space-y-3" onsubmit="Auth.submitRegister(event)" autocomplete="on">
-                <h2 class="font-bold text-slate-800">Daftar Akun Baru</h2>
-                <div id="regFirstNote" class="hidden text-xs bg-blue-50 text-blue-800 border border-blue-200 rounded-xl p-3">Belum ada akun di Spreadsheet ini. Anda pendaftar pertama dan otomatis menjadi <b>Admin Sekolah</b>.</div>
-                <div id="authRegError" class="hidden text-xs bg-red-50 text-red-700 border border-red-200 rounded-xl p-3"></div>
-                <div class="space-y-1">
-                    <label for="regName" class="text-xs font-bold text-slate-600">Nama Lengkap</label>
-                    <input type="text" id="regName" autocomplete="name" required maxlength="80" class="auth-input w-full border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm">
+            <!-- Kolom Form Autentikasi -->
+            <div class="md:col-span-7 p-6 sm:p-8 bg-white space-y-5">
+                <div class="md:hidden flex items-center gap-2.5 pb-3 border-b border-slate-200">
+                    <span class="w-7 h-7 rounded-md bg-slate-900 text-white font-semibold text-xs flex items-center justify-center">AG</span>
+                    <div>
+                        <div class="text-sm font-semibold text-slate-900 leading-tight">Sistem Administrasi Guru</div>
+                        <div class="text-[11px] text-slate-500">Ruang Kerja Sekolah</div>
+                    </div>
                 </div>
-                <div id="regSchoolRow" class="hidden space-y-1">
-                    <label for="regSchool" class="text-xs font-bold text-slate-600">Nama Sekolah</label>
-                    <input type="text" id="regSchool" maxlength="120" placeholder="contoh: SMP Negeri 1 Talaga Jaya" class="auth-input w-full border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm">
+
+                <!-- Panel: Memuat -->
+                <div id="authPanelLoading" class="py-12 text-center space-y-3">
+                    <div class="inline-block w-6 h-6 border-2 border-slate-300 border-t-blue-600 rounded-full animate-spin"></div>
+                    <p id="authLoadingText" class="text-sm font-medium text-slate-600">Menghubungkan ke basis data sekolah...</p>
                 </div>
-                <div class="space-y-1">
-                    <label for="regEmail" class="text-xs font-bold text-slate-600">Email</label>
-                    <input type="email" id="regEmail" autocomplete="email" required class="auth-input w-full border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm">
-                </div>
-                <div id="regPwRows" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+                <!-- Panel: Masuk -->
+                <form id="authPanelLogin" class="hidden space-y-4" onsubmit="Auth.submitLogin(event)" autocomplete="on">
+                    <div>
+                        <h2 class="text-lg font-semibold text-slate-900">Masuk ke Akun</h2>
+                        <p class="text-xs text-slate-500 mt-0.5">Gunakan email dan kata sandi yang terdaftar di sekolah Anda.</p>
+                    </div>
+                    <div id="authLoginError" class="hidden text-xs bg-red-50 text-red-700 border border-red-200 rounded-lg p-3"></div>
+                    <div class="space-y-1.5">
+                        <label for="loginEmail" class="block text-xs font-medium text-slate-700">Alamat Email</label>
+                        <input type="email" id="loginEmail" autocomplete="username" required placeholder="nama@sekolah.sch.id" class="auth-input w-full px-3.5 py-2.5 text-sm">
+                    </div>
+                    <div class="space-y-1.5">
+                        <label for="loginPassword" class="block text-xs font-medium text-slate-700">Kata Sandi</label>
+                        <div class="relative">
+                            <input type="password" id="loginPassword" autocomplete="current-password" required class="auth-input w-full pl-3.5 pr-24 py-2.5 text-sm">
+                            <button type="button" onclick="Auth.togglePassword('loginPassword', this)" class="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-medium text-slate-500 hover:text-slate-800 px-2 py-1">Tampilkan</button>
+                        </div>
+                    </div>
+                    <button type="submit" id="btnLogin" class="btn btn-primary w-full py-2.5 text-sm font-medium">Masuk</button>
+                    <div class="googleRow hidden space-y-3">
+                        <div class="flex items-center gap-3 text-xs text-slate-400"><span class="flex-1 border-t border-slate-200"></span>atau lanjutkan dengan<span class="flex-1 border-t border-slate-200"></span></div>
+                        <div class="google-btn flex justify-center min-h-[44px]"></div>
+                    </div>
+                    <p class="text-xs text-slate-500 text-center pt-1">Belum memiliki akun? <button type="button" onclick="Auth.showRegister()" class="font-semibold text-blue-700 hover:underline">Daftar akun baru</button></p>
+                </form>
+
+                <!-- Panel: Daftar -->
+                <form id="authPanelRegister" class="hidden space-y-3.5" onsubmit="Auth.submitRegister(event)" autocomplete="on">
+                    <div>
+                        <h2 class="text-lg font-semibold text-slate-900">Pendaftaran Akun Guru</h2>
+                        <p class="text-xs text-slate-500 mt-0.5">Lengkapi data di bawah untuk bergabung ke ruang kerja sekolah.</p>
+                    </div>
+                    <div id="regFirstNote" class="hidden text-xs bg-blue-50 text-blue-900 border border-blue-200 rounded-lg p-3">Belum ada akun terdaftar pada Spreadsheet ini. Pendaftar pertama ditetapkan sebagai <b>Admin Sekolah</b>.</div>
+                    <div id="authRegError" class="hidden text-xs bg-red-50 text-red-700 border border-red-200 rounded-lg p-3"></div>
                     <div class="space-y-1">
-                        <label for="regPassword" class="text-xs font-bold text-slate-600">Kata Sandi (min. 8)</label>
-                        <input type="password" id="regPassword" autocomplete="new-password" required minlength="8" class="auth-input w-full border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm">
+                        <label for="regName" class="block text-xs font-medium text-slate-700">Nama Lengkap &amp; Gelar</label>
+                        <input type="text" id="regName" autocomplete="name" required maxlength="80" class="auth-input w-full px-3.5 py-2 text-sm">
+                    </div>
+                    <div id="regSchoolRow" class="hidden space-y-1">
+                        <label for="regSchool" class="block text-xs font-medium text-slate-700">Nama Satuan Pendidikan</label>
+                        <input type="text" id="regSchool" maxlength="120" placeholder="Contoh: SMP Negeri 1 Talaga Jaya" class="auth-input w-full px-3.5 py-2 text-sm">
                     </div>
                     <div class="space-y-1">
-                        <label for="regPassword2" class="text-xs font-bold text-slate-600">Ulangi Kata Sandi</label>
-                        <input type="password" id="regPassword2" autocomplete="new-password" required minlength="8" class="auth-input w-full border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm">
+                        <label for="regEmail" class="block text-xs font-medium text-slate-700">Alamat Email</label>
+                        <input type="email" id="regEmail" autocomplete="email" required class="auth-input w-full px-3.5 py-2 text-sm">
+                    </div>
+                    <div id="regPwRows" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div class="space-y-1">
+                            <label for="regPassword" class="block text-xs font-medium text-slate-700">Kata Sandi (min. 8)</label>
+                            <input type="password" id="regPassword" autocomplete="new-password" required minlength="8" class="auth-input w-full px-3.5 py-2 text-sm">
+                        </div>
+                        <div class="space-y-1">
+                            <label for="regPassword2" class="block text-xs font-medium text-slate-700">Konfirmasi Sandi</label>
+                            <input type="password" id="regPassword2" autocomplete="new-password" required minlength="8" class="auth-input w-full px-3.5 py-2 text-sm">
+                        </div>
+                    </div>
+                    <div id="regCodeRow" class="hidden space-y-1">
+                        <label for="regCode" class="block text-xs font-medium text-slate-700">Kode Pendaftaran Sekolah</label>
+                        <input type="text" id="regCode" autocomplete="off" placeholder="Diberikan oleh Admin Sekolah" class="auth-input w-full px-3.5 py-2 text-sm">
+                    </div>
+                    <button type="submit" id="btnRegister" class="btn btn-primary w-full py-2.5 text-sm font-medium">Buat Akun</button>
+                    <div id="regGoogleNote" class="hidden text-xs bg-emerald-50 text-emerald-900 border border-emerald-200 rounded-lg p-3">Akun Google terverifikasi. Lengkapi data di atas untuk menyelesaikan pendaftaran tanpa kata sandi.</div>
+                    <div id="regGoogleRow" class="googleRow hidden space-y-3">
+                        <div class="flex items-center gap-3 text-xs text-slate-400"><span class="flex-1 border-t border-slate-200"></span>atau daftar dengan<span class="flex-1 border-t border-slate-200"></span></div>
+                        <div class="google-btn flex justify-center min-h-[44px]"></div>
+                    </div>
+                    <p class="text-xs text-slate-500 text-center pt-1">Sudah terdaftar? <button type="button" onclick="Auth.showLogin()" class="font-semibold text-blue-700 hover:underline">Masuk</button></p>
+                </form>
+
+                <!-- Panel: Peringatan Ganti Akun di Perangkat yang Sama -->
+                <div id="authPanelSwitch" class="hidden space-y-4">
+                    <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-2 text-xs text-amber-900 leading-relaxed">
+                        <p class="font-semibold text-sm">Pergantian Akun pada Perangkat Ini</p>
+                        <p>Perangkat ini sebelumnya digunakan oleh <b id="authSwitchPrevEmail"></b>. Anda saat ini masuk sebagai <b id="authSwitchNextEmail"></b>.</p>
+                        <p>Salinan data lokal akun sebelumnya di browser ini akan dibersihkan terlebih dahulu agar tidak bercampur (data yang telah tersinkron di Spreadsheet tetap aman).</p>
+                    </div>
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <button type="button" id="btnCancelSwitch" onclick="Auth.chooseDecision('cancel')" class="btn btn-secondary flex-1 py-2.5">Batal &amp; Keluar</button>
+                        <button type="button" id="btnConfirmSwitch" onclick="Auth.chooseDecision('wipe_and_continue')" class="btn btn-danger flex-1 py-2.5">Bersihkan &amp; Lanjutkan</button>
                     </div>
                 </div>
-                <div id="regCodeRow" class="hidden space-y-1">
-                    <label for="regCode" class="text-xs font-bold text-slate-600">Kode Pendaftaran Sekolah</label>
-                    <input type="text" id="regCode" autocomplete="off" placeholder="Minta ke Admin Sekolah" class="auth-input w-full border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm">
-                </div>
-                <button type="submit" id="btnRegister" class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm shadow transition">Daftar</button>
-                <div id="regGoogleNote" class="hidden text-xs bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl p-3">Akun Google terverifikasi. Lengkapi data di bawah untuk menyelesaikan pendaftaran (tidak perlu kata sandi).</div>
-                <div id="regGoogleRow" class="googleRow hidden space-y-3">
-                    <div class="flex items-center gap-3 text-[11px] text-slate-400"><span class="flex-1 border-t border-slate-200"></span>atau daftar dengan Google<span class="flex-1 border-t border-slate-200"></span></div>
-                    <div class="google-btn flex justify-center min-h-[44px]"></div>
-                </div>
-                <p class="text-xs text-slate-500 text-center">Sudah punya akun? <button type="button" onclick="Auth.showLogin()" class="font-bold text-blue-600 hover:underline">Masuk</button></p>
-            </form>
 
-            <!-- Panel: Peringatan Ganti Akun di Perangkat yang Sama -->
-            <div id="authPanelSwitch" class="hidden space-y-4">
-                <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2 text-xs text-amber-900">
-                    <p class="font-bold text-sm">⚠️ Pergantian Akun di Perangkat Ini</p>
-                    <p>Browser ini sebelumnya dipakai oleh <b id="authSwitchPrevEmail"></b>. Anda sekarang masuk sebagai <b id="authSwitchNextEmail"></b>.</p>
-                    <p>Untuk menjaga privasi antar guru, salinan data lokal akun sebelumnya di browser ini akan dihapus sebelum memuat data akun Anda (data akun sebelumnya yang sudah tersinkron di Spreadsheet tetap aman).</p>
+                <!-- Panel: Konfirmasi Unggah Data Lokal Lama -->
+                <div id="authPanelFirstSync" class="hidden space-y-4">
+                    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2 text-xs text-blue-900 leading-relaxed">
+                        <p class="font-semibold text-sm">Data Lokal Terdeteksi</p>
+                        <p id="authFirstSyncDesc"></p>
+                    </div>
+                    <div class="space-y-2">
+                        <button type="button" id="btnUploadLocal" onclick="Auth.chooseDecision('upload')" class="btn btn-primary w-full py-2.5">Unggah Data Lokal ke Akun Ini</button>
+                        <button type="button" id="btnSkipLocal" onclick="Auth.chooseDecision('skip')" class="btn btn-secondary w-full py-2.5">Gunakan Data dari Spreadsheet Saja</button>
+                        <button type="button" onclick="Auth.chooseDecision('cancel')" class="w-full py-2 text-slate-500 hover:text-slate-800 text-xs font-medium">Batal &amp; Keluar</button>
+                    </div>
                 </div>
-                <div class="flex flex-col sm:flex-row gap-2">
-                    <button type="button" id="btnCancelSwitch" onclick="Auth.chooseDecision('cancel')" class="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200 transition">Batal &amp; Keluar</button>
-                    <button type="button" id="btnConfirmSwitch" onclick="Auth.chooseDecision('wipe_and_continue')" class="flex-1 py-2.5 bg-red-600 text-white rounded-xl text-xs font-bold shadow hover:bg-red-700 transition">Bersihkan &amp; Lanjut</button>
-                </div>
-            </div>
 
-            <!-- Panel: Konfirmasi Unggah Data Lokal Lama (Koneksi Pertama) -->
-            <div id="authPanelFirstSync" class="hidden space-y-4">
-                <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2 text-xs text-blue-900">
-                    <p class="font-bold text-sm">☁️ Data Lokal Ditemukan</p>
-                    <p id="authFirstSyncDesc"></p>
+                <!-- Panel: Galat Koneksi Awal -->
+                <div id="authPanelError" class="hidden space-y-4">
+                    <div class="bg-red-50 border border-red-200 rounded-lg p-4 text-xs text-red-700 space-y-1">
+                        <p class="font-semibold text-sm">Koneksi Gagal</p>
+                        <p id="authErrorText"></p>
+                    </div>
+                    <button type="button" onclick="Auth.retryGate()" class="btn btn-primary w-full py-2.5">Coba Hubungkan Ulang</button>
                 </div>
-                <div class="space-y-2">
-                    <button type="button" id="btnUploadLocal" onclick="Auth.chooseDecision('upload')" class="w-full py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold shadow hover:bg-blue-700 transition">Unggah Data Lokal ke Akun Sekolah</button>
-                    <button type="button" id="btnSkipLocal" onclick="Auth.chooseDecision('skip')" class="w-full py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200 transition">Jangan Unggah (Pakai Data Spreadsheet Saja)</button>
-                    <button type="button" onclick="Auth.chooseDecision('cancel')" class="w-full py-2 text-slate-400 hover:text-slate-600 text-xs font-semibold">Batal &amp; Keluar</button>
-                </div>
-            </div>
-
-            <!-- Panel: Galat Koneksi Awal -->
-            <div id="authPanelError" class="hidden space-y-4">
-                <div class="bg-red-50 border border-red-200 rounded-xl p-4 text-xs text-red-700 space-y-1">
-                    <p class="font-bold">Gagal Terhubung</p>
-                    <p id="authErrorText"></p>
-                </div>
-                <button type="button" onclick="Auth.retryGate()" class="w-full py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold shadow hover:bg-blue-700 transition">Coba Lagi</button>
             </div>
         </div>
     </div>
 
-    <!-- MODAL CUSTOM NOTIFICATION -->
-    <div id="customModal" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-2xl border border-slate-100 text-center">
-            <div id="modalIcon" class="text-4xl mb-1">ℹ️</div>
-            <h3 id="modalTitle" class="font-bold text-lg text-slate-800">Informasi</h3>
-            <p id="modalMessage" class="text-sm text-slate-600">Pesan sistem...</p>
-            <div id="modalActionContainer" class="flex justify-center gap-2 pt-2">
-                <button onclick="closeModal()" class="px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold shadow hover:bg-blue-700 w-full transition">Tutup</button>
+    <!-- MODAL NOTIFIKASI SISTEM -->
+    <div id="customModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white p-6 w-full max-w-sm space-y-3">
+            <div id="modalIcon" class="hidden text-lg"></div>
+            <h3 id="modalTitle" class="font-semibold text-base text-slate-900">Informasi</h3>
+            <p id="modalMessage" class="text-sm text-slate-600 leading-relaxed">Pesan sistem...</p>
+            <div id="modalActionContainer" class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button onclick="closeModal()" class="btn btn-primary px-4 py-2">Mengerti</button>
             </div>
         </div>
     </div>
 
-    <!-- MODAL CONFIRM -->
-    <div id="modalConfirm" class="fixed inset-0 bg-slate-900/60 z-[60] hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-2xl border border-slate-100 text-center">
-            <div class="text-4xl mb-1 text-red-500">⚠️</div>
-            <h3 class="font-bold text-lg text-slate-800">Konfirmasi</h3>
-            <p id="confirmMessage" class="text-sm text-slate-600">Apakah Anda yakin?</p>
-            <div class="flex justify-center gap-2 pt-2">
-                <button onclick="closeConfirm()" class="px-5 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-sm font-bold shadow hover:bg-slate-200 w-full transition">Batal</button>
-                <button onclick="executeConfirm()" class="px-5 py-2.5 bg-red-600 text-white rounded-xl text-sm font-bold shadow hover:bg-red-700 w-full transition">Ya, Lanjutkan</button>
+    <!-- MODAL KONFIRMASI -->
+    <div id="modalConfirm" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4">
+        <div class="bg-white p-6 w-full max-w-sm space-y-3">
+            <h3 id="confirmTitle" class="font-semibold text-base text-slate-900">Konfirmasi Tindakan</h3>
+            <p id="confirmMessage" class="text-sm text-slate-600 leading-relaxed">Apakah Anda yakin?</p>
+            <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button id="btnConfirmCancel" onclick="closeConfirm()" class="btn btn-secondary px-4 py-2">Batal</button>
+                <button id="btnConfirmOk" onclick="executeConfirm()" class="btn btn-danger px-4 py-2">Ya, Lanjutkan</button>
             </div>
         </div>
     </div>
@@ -212,7 +238,7 @@
     <div id="modalAnalisisSumatif" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl p-6 w-full max-w-4xl space-y-4 shadow-2xl flex flex-col max-h-[90vh]">
             <div class="border-b pb-2 flex justify-between items-center flex-shrink-0">
-                <h4 class="font-bold text-lg text-slate-800">📊 Analisis Penilaian Sumatif (Berdasarkan Nilai)</h4>
+                <h4 class="font-bold text-lg text-slate-800">Analisis Penilaian Sumatif (Berdasarkan Nilai)</h4>
                 <button type="button" onclick="document.getElementById('modalAnalisisSumatif').classList.add('hidden')" class="text-slate-400 hover:text-slate-600 text-2xl font-bold">&times;</button>
             </div>
             <div class="overflow-y-auto flex-1 border border-slate-200 rounded-xl">
@@ -372,14 +398,14 @@
     <!-- MODAL GENERATE SOAL AI -->
     <div id="modalQuestionAI" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
         <form id="formQuestionAI" class="bg-white rounded-2xl p-6 w-full max-w-lg space-y-4 shadow-2xl" onsubmit="processGenerateSoalAI(event)">
-            <h4 class="font-bold text-lg border-b pb-2 text-slate-800 flex items-center gap-2">🪄 Generate Soal AI (Berdasarkan Kisi-Kisi)</h4>
+            <h4 class="font-bold text-lg border-b pb-2 text-slate-800 flex items-center gap-2">Generate Soal AI (Berdasarkan Kisi-Kisi)</h4>
             
             <div class="bg-amber-50 p-3 rounded-xl border border-amber-200 text-xs text-amber-900 space-y-2">
                 <p class="font-bold flex items-center gap-1">⚠️ Langkah Wajib:</p>
                 <p>Sebelum meng-generate butir soal, silakan unggah file dokumen Kisi-Kisi Anda (.pdf, .docx, .txt) atau pilih dari TP terdaftar.</p>
                 <div class="pt-1">
                     <label class="bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-bold text-[11px] shadow hover:bg-indigo-700 transition cursor-pointer inline-flex items-center gap-1.5">
-                        📤 Unggah Dokumen Kisi-Kisi <input type="file" accept=".pdf,.docx,.txt" class="hidden" onchange="handleKisiUpload(event)">
+                        Unggah Dokumen Kisi-Kisi <input type="file" accept=".pdf,.docx,.txt" class="hidden" onchange="handleKisiUpload(event)">
                     </label>
                     <span id="uploadedKisiStatus" class="ml-2 font-semibold text-indigo-900 italic text-[11px]">Belum ada file kisi-kisi diunggah</span>
                 </div>
@@ -419,90 +445,91 @@
             </div>
             <div class="flex justify-end gap-2 pt-4 border-t mt-4">
                 <button type="button" onclick="document.getElementById('modalQuestionAI').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold hover:bg-slate-200 transition">Batal</button>
-                <button type="submit" id="btnGenAI" class="px-5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow hover:bg-indigo-700 transition flex items-center gap-2">✨ Generate Sekarang</button>
+                <button type="submit" id="btnGenAI" class="px-5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow hover:bg-indigo-700 transition flex items-center gap-2">Generate Sekarang</button>
             </div>
         </form>
     </div>
 
     <!-- SIDEBAR -->
     <div id="sidebarOverlay" class="sidebar-overlay no-print" onclick="closeSidebar()"></div>
-    <aside id="sidebar" class="app-sidebar w-64 bg-slate-900 text-white flex flex-col hidden md:flex h-full shadow-xl z-30 transition-all duration-300 flex-shrink-0">
-        <div class="p-4 flex items-center gap-3 border-b border-slate-800/80">
-            <div class="bg-gradient-to-br from-blue-500 to-indigo-600 p-2.5 rounded-xl text-lg shadow-lg flex-shrink-0">👨‍🏫</div>
+    <aside id="sidebar" class="app-sidebar w-64 text-white flex flex-col hidden md:flex h-full z-30 flex-shrink-0">
+        <div class="px-4 py-3.5 flex items-center gap-3 border-b border-slate-800">
+            <div class="w-8 h-8 rounded-md bg-blue-600 text-white font-semibold text-xs flex items-center justify-center tracking-wider flex-shrink-0">AG</div>
             <div class="min-w-0">
-                <h1 class="font-bold text-sm tracking-tight leading-tight">Admin Guru</h1>
-                <p id="sidePeriodName" class="text-[11px] text-blue-400 font-semibold mt-0.5 truncate">Memuat...</p>
+                <h1 class="font-semibold text-sm text-slate-100 leading-tight">Administrasi Guru</h1>
+                <p id="sidePeriodName" class="text-[11px] text-slate-400 font-normal mt-0.5 truncate">Memuat...</p>
             </div>
-            <button type="button" class="md:hidden ml-auto text-slate-400 hover:text-white text-lg px-2 py-1 rounded-lg hover:bg-slate-800" onclick="closeSidebar()" aria-label="Tutup menu">✕</button>
+            <button type="button" class="md:hidden ml-auto text-slate-400 hover:text-white p-1.5 rounded-md hover:bg-slate-800" onclick="closeSidebar()" aria-label="Tutup menu">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
         </div>
         <div class="px-3 pt-3 pb-1">
-            <input type="search" id="navFilterInput" oninput="filterNavMenu(this.value)" placeholder="🔍 Cari menu..." class="nav-search w-full px-3 py-1.5 rounded-xl text-xs text-slate-200 placeholder-slate-500 focus:outline-none">
+            <div class="relative">
+                <svg class="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                <input type="search" id="navFilterInput" oninput="filterNavMenu(this.value)" placeholder="Cari menu..." class="nav-search w-full pl-8 pr-3 py-1.5 text-xs placeholder-slate-500">
+            </div>
         </div>
-        <nav class="flex-1 overflow-y-auto py-2.5 px-2.5 space-y-2" id="navMenu">
+        <nav class="flex-1 overflow-y-auto py-2.5 px-2.5 space-y-3" id="navMenu" aria-label="Menu Utama">
             <!-- Navigation items generated by JS -->
         </nav>
-        <div class="p-3.5 border-t border-slate-800/80 text-[11px] text-slate-400 text-center">
-            <p class="font-semibold text-slate-300">Sistem Administrasi Terpadu</p>
-            <p class="text-[10px] text-slate-500 mt-0.5">Kurikulum Merdeka • Rapor &amp; AI</p>
+        <div class="px-4 py-3 border-t border-slate-800 text-[11px] text-slate-500 flex items-center justify-between">
+            <span>Kurikulum Merdeka</span>
+            <span class="font-mono-code text-[10px] text-slate-600">v20</span>
         </div>
     </aside>
 
     <!-- MAIN CONTAINER -->
     <div class="flex-1 flex flex-col h-screen overflow-hidden relative w-full">
         <!-- HEADER -->
-        <header class="app-header bg-white/95 backdrop-blur border-b border-slate-200/80 px-3.5 sm:px-6 py-2.5 sm:py-3 flex justify-between items-center gap-3 z-20 flex-shrink-0">
+        <header class="app-header px-3.5 sm:px-6 py-2.5 flex justify-between items-center gap-3 z-20 flex-shrink-0">
             <div class="flex items-center gap-3 min-w-0">
-                <button type="button" class="md:hidden w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center text-lg font-bold transition flex-shrink-0" onclick="toggleSidebar()" aria-label="Buka menu">☰</button>
+                <button type="button" class="md:hidden w-9 h-9 rounded-md border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 flex items-center justify-center flex-shrink-0" onclick="toggleSidebar()" aria-label="Buka menu">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                </button>
                 <div class="min-w-0">
-                    <h2 id="headerSchool" class="font-bold text-slate-800 text-sm sm:text-lg leading-tight truncate">SMP Negeri 1 Talaga Jaya</h2>
-                    <p id="headerInfo" class="text-[11px] sm:text-xs text-slate-500 font-medium mt-0.5 truncate">Memuat Data...</p>
+                    <h2 id="headerSchool" class="font-semibold text-slate-900 text-sm sm:text-base leading-tight truncate">SMP Negeri 1 Talaga Jaya</h2>
+                    <p id="headerInfo" class="text-[11px] sm:text-xs text-slate-500 mt-0.5 truncate">Memuat Data...</p>
                 </div>
             </div>
-            <div class="header-tools flex items-center gap-2 sm:gap-3 flex-shrink-0">
-                <div class="flex items-center gap-1.5 bg-slate-100/90 hover:bg-slate-100 px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200/90 transition">
-                    <span class="hidden sm:inline text-[11px] font-bold text-slate-500">Kelas:</span>
-                    <select id="globalClassSelector" class="bg-transparent text-xs font-bold text-blue-700 focus:outline-none cursor-pointer" onchange="changeGlobalClass(this.value)">
+            <div class="header-tools flex items-center gap-2 sm:gap-2.5 flex-shrink-0">
+                <div class="flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100/80 px-2.5 py-1.5 rounded-md border border-slate-200 transition">
+                    <label for="globalClassSelector" class="hidden sm:inline text-xs font-medium text-slate-500">Kelas</label>
+                    <select id="globalClassSelector" class="bg-transparent text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer" onchange="changeGlobalClass(this.value)">
                         <!-- Options generated by JS -->
                     </select>
                 </div>
-                <div id="archiveBanner" class="hidden bg-amber-100 text-amber-800 text-xs px-3 py-1 rounded-full font-bold border border-amber-300">🔒 Arsip</div>
+                <div id="archiveBanner" class="hidden bg-amber-50 text-amber-800 text-xs px-2.5 py-1 rounded-md font-medium border border-amber-200">Arsip</div>
                 <div id="cloudHeaderBar" class="hidden flex items-center gap-2 no-print">
-                    <span id="cloudRoleBadge" class="hidden lg:inline-flex text-[10px] font-bold px-2.5 py-1 rounded-full border bg-slate-100 text-slate-700 border-slate-200">Guru</span>
-                    <button type="button" id="syncStatusBadge" onclick="Auth.manualSync()" class="text-[11px] font-bold px-2.5 py-1.5 rounded-xl border bg-emerald-50 text-emerald-700 border-emerald-200 cursor-pointer">☁️ Tersinkron</button>
+                    <span id="cloudRoleBadge" class="hidden lg:inline-flex text-[11px] font-medium px-2.5 py-1 rounded-md border bg-slate-50 text-slate-700 border-slate-200">Guru</span>
+                    <button type="button" id="syncStatusBadge" onclick="Auth.manualSync()" class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-md border bg-white text-slate-700 border-slate-200 cursor-pointer">Tersinkron</button>
                 </div>
-                <div class="text-right hidden xl:block pl-1 border-l border-slate-200">
-                    <p id="headerTeacher" class="text-xs font-bold text-slate-800 leading-tight max-w-[160px] truncate">Guru Mapel</p>
-                    <span id="headerActivePeriod" class="text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full mt-0.5 inline-block">Periode</span>
+                <div class="text-right hidden xl:block pl-2.5 border-l border-slate-200">
+                    <p id="headerTeacher" class="text-xs font-semibold text-slate-800 leading-tight max-w-[160px] truncate">Guru Mapel</p>
+                    <span id="headerActivePeriod" class="text-[11px] font-normal text-slate-500 block mt-0.5">Periode</span>
                 </div>
 
                 <!-- AVATAR INISIAL (RADIUS 50%) & MENU AKUN -->
                 <div class="relative no-print" id="userMenuWrapper">
-                    <button type="button" id="userAvatarBtn" onclick="Auth.toggleUserMenu(event)" class="user-avatar-btn w-10 h-10 flex items-center justify-center font-bold text-xs sm:text-sm text-white shadow-sm cursor-pointer focus:outline-none" aria-haspopup="true" aria-expanded="false" title="Profil &amp; Akun">
+                    <button type="button" id="userAvatarBtn" onclick="Auth.toggleUserMenu(event)" class="user-avatar-btn w-9 h-9 flex items-center justify-center text-xs cursor-pointer select-none" aria-haspopup="true" aria-expanded="false" title="Profil &amp; Akun">
                         <span id="headerAvatarInitials">GM</span>
                     </button>
-                    <div id="userDropdownMenu" class="user-dropdown hidden absolute right-0 mt-2.5 w-64 bg-white rounded-2xl shadow-2xl border border-slate-200/90 py-2 z-50">
-                        <div class="px-4 py-3 border-b border-slate-100 flex items-center gap-3">
-                            <div id="dropdownAvatarInitials" class="user-avatar-circle w-10 h-10 flex-shrink-0 flex items-center justify-center font-bold text-sm text-white shadow-sm">GM</div>
+                    <div id="userDropdownMenu" class="user-dropdown hidden absolute right-0 mt-2 w-60 bg-white py-1.5 z-50">
+                        <div class="px-3.5 py-2.5 border-b border-slate-100 flex items-center gap-2.5">
+                            <div id="dropdownAvatarInitials" class="user-avatar-circle w-9 h-9 flex-shrink-0 flex items-center justify-center text-xs">GM</div>
                             <div class="min-w-0 flex-1">
-                                <p id="dropdownUserName" class="text-sm font-bold text-slate-800 truncate">Guru Mapel</p>
+                                <p id="dropdownUserName" class="text-xs font-semibold text-slate-900 truncate">Guru Mapel</p>
                                 <p id="dropdownUserSub" class="text-[11px] text-slate-500 truncate">Ruang Kerja</p>
-                                <span id="dropdownRoleBadge" class="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full border bg-blue-50 text-blue-700 border-blue-200">Guru Mapel</span>
+                                <span id="dropdownRoleBadge" class="inline-block mt-1 text-[10px] font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">Guru Mapel</span>
                             </div>
                         </div>
-                        <div class="p-1.5 space-y-0.5">
-                            <button type="button" onclick="Auth.openProfileModal('view')" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-semibold text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition">
-                                <span class="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-base flex-shrink-0">👤</span>
-                                <span class="leading-tight">
-                                    <span class="block">Profil Saya</span>
-                                    <span class="block text-[11px] font-normal text-slate-400">Lihat &amp; edit biodata / sandi</span>
-                                </span>
+                        <div class="p-1 space-y-0.5">
+                            <button type="button" onclick="Auth.openProfileModal('view')" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-left text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition">
+                                <svg class="w-4 h-4 text-slate-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                                <span>Profil Saya</span>
                             </button>
-                            <button type="button" id="btnMenuLogout" onclick="Auth.closeUserMenu(); Auth.logout();" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm font-semibold text-red-600 hover:bg-red-50 transition">
-                                <span class="w-8 h-8 rounded-xl bg-red-50 text-red-600 flex items-center justify-center text-base flex-shrink-0">🚪</span>
-                                <span class="leading-tight">
-                                    <span class="block">Keluar</span>
-                                    <span class="block text-[11px] font-normal text-red-400">Akhiri sesi akun</span>
-                                </span>
+                            <button type="button" id="btnMenuLogout" onclick="Auth.logout()" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-left text-xs font-medium text-red-600 hover:bg-red-50 transition">
+                                <svg class="w-4 h-4 text-red-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                                <span>Keluar</span>
                             </button>
                         </div>
                     </div>
@@ -511,7 +538,7 @@
         </header>
 
         <!-- VIEW CONTAINER -->
-        <main class="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50 relative" id="mainContainer">
+        <main class="flex-1 overflow-y-auto p-4 sm:p-6 relative" id="mainContainer">
             
             <!-- PRINT TEMPLATE HEADER -->
             <div id="printHeaderTemplate" class="print-header">
@@ -524,70 +551,73 @@
 
             <!-- VIEW: DASHBOARD -->
             <div id="view-dashboard" class="view-section active space-y-6">
-                <div class="backup-reminder hidden bg-amber-50 border border-amber-200 text-amber-900 rounded-xl px-4 py-3 text-sm flex items-center justify-between gap-3 flex-wrap no-print"><span data-reminder-text>Backup belum dibuat.</span><button onclick="switchView('backup')" class="bg-amber-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold">Buka Backup</button></div>
-                <div class="flex justify-between items-end flex-wrap gap-4">
+                <div class="backup-reminder hidden bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-4 py-2.5 text-xs flex items-center justify-between gap-3 flex-wrap no-print"><span data-reminder-text>Cadangan data belum dibuat minggu ini.</span><button onclick="switchView('backup')" class="btn btn-secondary py-1 px-2.5 text-xs">Buka Cadangan</button></div>
+                <div class="page-header flex justify-between items-start sm:items-center flex-wrap gap-3">
                     <div>
-                        <h3 class="text-2xl font-bold text-slate-800">Dashboard Utama</h3>
-                        <p class="text-slate-500 text-sm">Ringkasan kondisi kelas dan pembelajaran kelas aktif.</p>
+                        <h3 class="text-2xl text-slate-900">Ringkasan Kelas Aktif</h3>
+                        <p class="text-slate-500 text-xs mt-0.5">Ikhtisar ketercapaian pembelajaran, kehadiran, dan siswa yang memerlukan tindak lanjut.</p>
                     </div>
                     <div class="flex gap-2">
-                        <button onclick="switchView('reports')" class="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-slate-700 transition flex items-center gap-2">📄 Lihat Laporan</button>
-                        <button onclick="switchView('backup')" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition flex items-center gap-2">💾 Backup Data</button>
+                        <button onclick="switchView('reports')" class="btn btn-secondary">Pusat Laporan</button>
+                        <button onclick="switchView('scores')" class="btn btn-primary">Input &amp; Rekap Nilai</button>
                     </div>
                 </div>
 
-                <!-- STATS CARDS -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div class="stat-card stat-blue bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-start justify-between gap-3">
-                        <div>
-                            <p class="text-slate-500 text-[11px] font-bold uppercase tracking-wider">Peserta Didik Kelas</p>
-                            <h4 class="text-3xl font-extrabold text-slate-800 mt-1.5" id="dTotalSiswa">0</h4>
-                            <span class="inline-block mt-1 text-xs text-blue-600 font-semibold" id="dGenderInfo">L: 0 | P: 0</span>
-                        </div>
-                        <div class="w-11 h-11 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center text-xl flex-shrink-0">👨‍🎓</div>
+                <!-- METRICS LEDGER STRIP (Satu pita metrik presisi, bukan 4 kartu berwarna) -->
+                <div class="metrics-ledger">
+                    <div class="metric-cell">
+                        <p class="metric-label">Peserta Didik</p>
+                        <div class="metric-value" id="dTotalSiswa">0</div>
+                        <p class="metric-meta" id="dGenderInfo">L: 0 · P: 0</p>
                     </div>
-                    <div class="stat-card stat-emerald bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-start justify-between gap-3">
-                        <div>
-                            <p class="text-slate-500 text-[11px] font-bold uppercase tracking-wider">Rata-rata Kehadiran</p>
-                            <h4 class="text-3xl font-extrabold text-slate-800 mt-1.5" id="dAvgHadir">0%</h4>
-                            <span class="inline-block mt-1 text-xs text-emerald-600 font-semibold" id="dMeetInfo">0 Pertemuan</span>
-                        </div>
-                        <div class="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-xl flex-shrink-0">📋</div>
+                    <div class="metric-cell">
+                        <p class="metric-label">Rata-rata Kehadiran</p>
+                        <div class="metric-value" id="dAvgHadir">0%</div>
+                        <p class="metric-meta" id="dMeetInfo">0 Pertemuan</p>
                     </div>
-                    <div class="stat-card stat-indigo bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-start justify-between gap-3">
-                        <div>
-                            <p class="text-slate-500 text-[11px] font-bold uppercase tracking-wider">Rata-rata Nilai Kelas</p>
-                            <h4 class="text-3xl font-extrabold text-slate-800 mt-1.5" id="dAvgNilai">0</h4>
-                            <span class="inline-block mt-1 text-xs text-indigo-600 font-semibold" id="dScoreInfo">KKTP: 75</span>
-                        </div>
-                        <div class="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-xl flex-shrink-0">📈</div>
+                    <div class="metric-cell">
+                        <p class="metric-label">Rata-rata Nilai Akhir</p>
+                        <div class="metric-value" id="dAvgNilai">0</div>
+                        <p class="metric-meta" id="dScoreInfo">KKTP: 75</p>
                     </div>
-                    <div class="stat-card stat-amber bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-start justify-between gap-3">
-                        <div>
-                            <p class="text-slate-500 text-[11px] font-bold uppercase tracking-wider">Ketuntasan Kelas</p>
-                            <h4 class="text-3xl font-extrabold text-slate-800 mt-1.5" id="dKetuntasan">0%</h4>
-                            <span class="inline-block mt-1 text-xs text-amber-600 font-semibold" id="dPassInfo">0 Tuntas | 0 Belum</span>
-                        </div>
-                        <div class="w-11 h-11 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center text-xl flex-shrink-0">🏆</div>
+                    <div class="metric-cell">
+                        <p class="metric-label">Tingkat Ketuntasan</p>
+                        <div class="metric-value" id="dKetuntasan">0%</div>
+                        <p class="metric-meta" id="dPassInfo">0 Tuntas · 0 Belum</p>
                     </div>
                 </div>
 
-                <!-- CHARTS -->
-                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 chart-container">
-                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                        <h4 class="font-bold text-sm mb-4 text-slate-700">Distribusi Ketuntasan Belajar</h4>
-                        <div class="h-64"><canvas id="chartTuntas"></canvas></div>
+                <!-- KOMPOSISI ASIMETRIS: ANALITIK (7 KOLOM) & PRIORITAS TINDAK LANJUT (5 KOLOM) -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                    <div class="lg:col-span-7 bg-white border border-slate-200 rounded-lg p-5 chart-container space-y-5">
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <div>
+                                <h4 class="font-semibold text-sm text-slate-900">Sebaran Ketuntasan &amp; Tindak Lanjut</h4>
+                                <p class="text-xs text-slate-500">Proporsi pencapaian siswa terhadap batas KKTP kelas aktif.</p>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-1">
+                            <div>
+                                <p class="text-xs font-medium text-slate-500 mb-2">Proporsi Ketuntasan</p>
+                                <div class="h-52"><canvas id="chartTuntas"></canvas></div>
+                            </div>
+                            <div>
+                                <p class="text-xs font-medium text-slate-500 mb-2">Kelompok Tindak Lanjut</p>
+                                <div class="h-52"><canvas id="chartTindak"></canvas></div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                        <h4 class="font-bold text-sm mb-4 text-slate-700">Analisis Tindak Lanjut Siswa</h4>
-                        <div class="h-64"><canvas id="chartTindak"></canvas></div>
-                    </div>
-                </div>
 
-                <!-- WARNING / NOTIFICATION PANEL -->
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-3">
-                    <h4 class="font-bold text-slate-700 flex items-center gap-2">⚠️ Siswa Perlu Perhatian Khusus</h4>
-                    <div id="dWarnings" class="space-y-2 max-h-48 overflow-y-auto"></div>
+                    <div class="lg:col-span-5 bg-white border border-slate-200 rounded-lg overflow-hidden">
+                        <div class="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
+                            <div>
+                                <h4 class="font-semibold text-sm text-slate-900">Perlu Perhatian Khusus</h4>
+                                <p class="text-xs text-slate-500">Siswa di bawah KKTP atau ambang kehadiran.</p>
+                            </div>
+                            <button type="button" onclick="switchView('remedial')" class="text-xs font-medium text-blue-700 hover:underline">Lihat Semua</button>
+                        </div>
+                        <div id="dWarnings" class="divide-y divide-slate-100 max-h-72 overflow-y-auto"></div>
+                    </div>
                 </div>
             </div>
 
@@ -599,17 +629,17 @@
                         <p class="text-slate-500 text-sm">Kelola daftar siswa untuk kelas yang sedang dipilih.</p>
                     </div>
                     <div class="flex flex-wrap gap-2">
-                        <button onclick="exportStudentsCSV()" class="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-sm font-bold shadow hover:bg-emerald-700 transition flex items-center gap-1.5">📥 Export CSV</button>
-                        <label data-admin-only class="bg-amber-600 text-white px-3.5 py-2 rounded-xl text-sm font-bold shadow hover:bg-amber-700 transition flex items-center gap-1.5 cursor-pointer">
-                            📤 Import CSV <input type="file" id="importCsvFile" accept=".csv" class="hidden" onchange="importStudentsCSV(event)">
+                        <button onclick="exportStudentsCSV()" class="btn btn-secondary">Ekspor CSV</button>
+                        <label data-admin-only class="btn btn-secondary cursor-pointer">
+                            Impor CSV <input type="file" id="importCsvFile" accept=".csv" class="hidden" onchange="importStudentsCSV(event)">
                         </label>
-                        <button data-admin-only onclick="openModalStudent()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition">+ Tambah Siswa</button>
+                        <button data-admin-only onclick="openModalStudent()" class="btn btn-primary">+ Tambah Siswa</button>
                     </div>
                 </div>
-                <div id="studentReadonlyNote" class="hidden bg-slate-100 border border-slate-200 text-slate-600 rounded-xl px-4 py-2.5 text-xs no-print">🔒 Daftar peserta didik dikelola terpusat oleh Admin Sekolah agar seragam bagi seluruh guru mata pelajaran.</div>
+                <div id="studentReadonlyNote" class="hidden bg-slate-100 border border-slate-200 text-slate-600 rounded-xl px-4 py-2.5 text-xs no-print">Daftar peserta didik dikelola terpusat oleh Admin Sekolah agar seragam bagi seluruh guru mata pelajaran.</div>
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                     <div class="p-4 border-b bg-slate-50/70 flex flex-col sm:flex-row justify-between gap-3">
-                        <input type="text" id="searchStudent" placeholder="🔍 Cari nama atau NISN..." class="w-full sm:w-80 px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" oninput="renderStudents()">
+                        <input type="text" id="searchStudent" placeholder="Cari nama atau NISN..." class="w-full sm:w-80 px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" oninput="renderStudents()">
                         <div class="flex items-center gap-2">
                             <span class="text-xs font-bold text-slate-500">Urutkan:</span>
                             <select id="sortStudent" class="border border-slate-200 px-3.5 py-2 rounded-xl text-xs font-medium focus:outline-none" onchange="renderStudents()">
@@ -647,7 +677,7 @@
                     </div>
                     <button data-admin-only onclick="openModalClass()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition">+ Tambah Kelas</button>
                 </div>
-                <div id="classReadonlyNote" class="hidden bg-slate-100 border border-slate-200 text-slate-600 rounded-xl px-4 py-2.5 text-xs no-print">🔒 Daftar kelas/rombel dikelola oleh Admin Sekolah. Gunakan tombol <b>Pilih Aktif</b> untuk berpindah kelas mengajar.</div>
+                <div id="classReadonlyNote" class="hidden bg-slate-100 border border-slate-200 text-slate-600 rounded-xl px-4 py-2.5 text-xs no-print">Daftar kelas/rombel dikelola oleh Admin Sekolah. Gunakan tombol <b>Pilih Aktif</b> untuk berpindah kelas mengajar.</div>
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden p-6">
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm text-left">
@@ -701,20 +731,20 @@
             <div id="view-curriculum" class="view-section space-y-6">
                 <div class="flex justify-between items-center flex-wrap gap-4">
                     <div>
-                        <h3 class="text-2xl font-bold text-slate-800">📚 Data Kurikulum</h3>
-                        <p class="text-slate-500 text-sm">Daftar Capaian Pembelajaran, TP, ATP, IKTP & KKTP yang telah dianalisis.</p>
+                        <h3 class="text-2xl font-bold text-slate-800">Data Kurikulum</h3>
+                        <p class="text-slate-500 text-sm">Daftar Capaian Pembelajaran, TP, ATP, IKTP &amp; KKTP yang telah dianalisis.</p>
                     </div>
-                    <div class="flex gap-2">
-                        <label class="bg-amber-600 text-white px-3.5 py-2 rounded-xl text-sm font-bold shadow hover:bg-amber-700 transition flex items-center gap-2 cursor-pointer">
-                            📤 Unggah TP Mandiri
+                    <div class="flex flex-wrap gap-2">
+                        <label class="btn btn-secondary cursor-pointer">
+                            Unggah TP Mandiri
                             <input type="file" accept=".txt,.csv" class="hidden" onchange="importTP(event)">
                         </label>
-                        <label class="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-sm font-bold shadow hover:bg-emerald-700 transition flex items-center gap-2 cursor-pointer">
-                            📤 Unggah Buku / Materi
+                        <label class="btn btn-secondary cursor-pointer">
+                            Unggah Materi
                             <input type="file" accept=".pdf,.docx,.txt" class="hidden" onchange="handleFileUpload(event, 'Kurikulum')">
                         </label>
-                        <button onclick="printReport('view-curriculum', 'ANALISIS CAPAIAN PEMBELAJARAN (CP) & TP')" class="bg-slate-800 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak</button>
-                        <button onclick="openAnalisisCP()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition flex items-center gap-2">+ Tambah Analisis CP</button>
+                        <button onclick="printReport('view-curriculum', 'ANALISIS CAPAIAN PEMBELAJARAN (CP) & TP')" class="btn btn-secondary">Cetak</button>
+                        <button onclick="openAnalisisCP()" class="btn btn-primary">+ Tambah Analisis CP</button>
                     </div>
                 </div>
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4">
@@ -745,7 +775,7 @@
             <div id="view-analisis-cp" class="view-section space-y-6">
                 <div class="flex justify-between items-center flex-wrap gap-4">
                     <div>
-                        <h3 class="text-2xl font-bold text-slate-800">🪄 Analisis Capaian Pembelajaran (AI)</h3>
+                        <h3 class="text-2xl font-bold text-slate-800">Analisis Capaian Pembelajaran (AI)</h3>
                         <p class="text-slate-500 text-sm">Tempelkan teks CP Anda, lalu klik "Analisis & Generate Semua Kolom" untuk memecah CP secara instan.</p>
                     </div>
                     <button type="button" onclick="switchView('curriculum')" class="bg-slate-100 text-slate-700 px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-200 transition">Kembali ke Daftar Kurikulum</button>
@@ -763,11 +793,11 @@
                         
                         <!-- Indikator Referensi Materi Aktif -->
                         <div id="cpRefIndicator" class="hidden mt-3 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-semibold flex items-center gap-2">
-                            📚 Referensi Materi Aktif: <span id="cpRefName" class="font-bold text-emerald-900"></span>
+                            Referensi Materi Aktif: <span id="cpRefName" class="font-bold text-emerald-900"></span>
                         </div>
                         
                         <div class="flex justify-end mt-4">
-                            <button data-ai type="button" onclick="analyzeAndGenerateAllAI()" id="btnGenAllAI" class="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow hover:bg-indigo-700 transition flex items-center gap-2">🪄 Analisis & Generate Semua Kolom</button>
+                            <button data-ai type="button" onclick="analyzeAndGenerateAllAI()" id="btnGenAllAI" class="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow hover:bg-indigo-700 transition flex items-center gap-2">Analisis & Generate Semua Kolom</button>
                         </div>
                     </div>
 
@@ -816,7 +846,7 @@
                     </div>
                     
                     <div class="flex justify-end gap-2 pt-4 border-t">
-                        <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition">💾 Simpan Analisis</button>
+                        <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition">Simpan Analisis</button>
                     </div>
                 </form>
             </div>
@@ -825,14 +855,14 @@
             <div id="view-p5" class="view-section space-y-6">
                 <div class="flex justify-between items-center flex-wrap gap-4 no-print">
                     <div>
-                        <h3 class="text-2xl font-bold text-slate-800">🎯 Proyek Dimensi Profil Lulusan</h3>
+                        <h3 class="text-2xl font-bold text-slate-800">Proyek Dimensi Profil Lulusan</h3>
                         <p class="text-slate-500 text-sm">Generate ide proyek berbasis dimensi profil lulusan (Karakter, Kompetensi) menggunakan AI.</p>
                     </div>
-                    <button onclick="openModalProyekAI()" class="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-indigo-700 transition flex items-center gap-2">🪄 Generate Proyek AI</button>
+                    <button onclick="openModalProyekAI()" class="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-indigo-700 transition flex items-center gap-2">Generate Proyek AI</button>
                 </div>
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-4 no-print">
                     <div class="flex justify-between items-center flex-wrap gap-3">
-                        <input type="text" id="searchP5" placeholder="🔍 Cari judul atau dimensi proyek..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderP5()">
+                        <input type="text" id="searchP5" placeholder="Cari judul atau dimensi proyek..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderP5()">
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm text-left">
@@ -856,8 +886,8 @@
                     <div class="flex justify-between items-center border-b pb-2 no-print">
                         <h4 class="font-bold text-slate-800">Modul Proyek P5 (AI Generated)</h4>
                         <div class="flex gap-2">
-                            <button onclick="downloadModulP5Doc()" class="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-700 transition">📥 Download DOC</button>
-                            <button onclick="printReport('view-p5', 'MODUL PROYEK PENGUATAN PROFIL PELAJAR PANCASILA')" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-700 transition">🖨️ Cetak</button>
+                            <button onclick="downloadModulP5Doc()" class="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-blue-700 transition">Download DOC</button>
+                            <button onclick="printReport('view-p5', 'MODUL PROYEK PENGUATAN PROFIL PELAJAR PANCASILA')" class="bg-slate-800 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-700 transition">Cetak</button>
                             <button onclick="document.getElementById('p5ModuleContainer').classList.add('hidden')" class="bg-slate-100 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-slate-200 transition">Tutup</button>
                         </div>
                     </div>
@@ -873,7 +903,7 @@
                         <p class="text-slate-500 text-sm">Buat Modul Ajar, LKPD, dan Asesmen secara otomatis berdasarkan CP/TP tersimpan.</p>
                     </div>
                     <label class="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-emerald-700 transition flex items-center gap-2 cursor-pointer">
-                        📤 Unggah Referensi Materi
+                        Unggah Referensi Materi
                         <input type="file" accept=".pdf,.docx,.txt" class="hidden" onchange="handleFileUpload(event, 'Generator Modul Ajar')">
                     </label>
                 </div>
@@ -903,7 +933,7 @@
                         <label class="block text-xs font-bold text-slate-700 mb-1">Jumlah Pertemuan</label>
                         <select id="genMeetings" class="w-full border border-slate-200 rounded-xl p-2.5 text-sm focus:outline-none"><option value="1">1 pertemuan</option><option value="2" selected>2 pertemuan</option><option value="3">3 pertemuan</option></select>
                     </div>
-                    <button data-ai onclick="generateModulAjarAI()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold text-sm shadow hover:bg-blue-700 transition">🪄 Generate Modul Ajar Otomatis</button>
+                    <button data-ai onclick="generateModulAjarAI()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold text-sm shadow hover:bg-blue-700 transition">Generate Modul Ajar Otomatis</button>
                 </div>
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden no-print">
                     <div class="p-4 border-b bg-slate-50/70 font-bold text-sm text-slate-700">Modul Ajar Tersimpan</div>
@@ -916,9 +946,9 @@
                     <h4 class="font-bold text-slate-800 border-b pb-2 flex justify-between items-center flex-wrap gap-2 no-print">
                         <span>Hasil Modul Ajar (Review)</span>
                         <div class="flex gap-2">
-                            <button onclick="saveModulAjar()" class="bg-emerald-600 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-emerald-700 transition">💾 Simpan Modul</button>
-                            <button onclick="downloadModulDoc()" class="bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-blue-700 transition">📥 Download DOC</button>
-                            <button onclick="printReport('view-generator', 'MODUL AJAR KURIKULUM MERDEKA')" class="bg-slate-800 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-slate-700 transition">🖨️ Cetak</button>
+                            <button onclick="saveModulAjar()" class="bg-emerald-600 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-emerald-700 transition">Simpan Modul</button>
+                            <button onclick="downloadModulDoc()" class="bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-blue-700 transition">Download DOC</button>
+                            <button onclick="printReport('view-generator', 'MODUL AJAR KURIKULUM MERDEKA')" class="bg-slate-800 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-slate-700 transition">Cetak</button>
                         </div>
                     </h4>
                     <div id="genResultContent" class="prose text-sm text-slate-700 space-y-3 bg-slate-50 p-4 rounded-xl border"></div>
@@ -932,21 +962,21 @@
                         <h3 class="text-2xl font-bold text-slate-800">Bank Soal & Asesmen Terintegrasi</h3>
                         <p class="text-slate-500 text-sm">Kelola butir soal, buat paket asesmen, dan analisis hasil ujian.</p>
                     </div>
-                    <div class="flex gap-2 flex-wrap">
-                        <button onclick="printKisiKisi()" class="bg-teal-600 text-white px-3.5 py-2 rounded-xl text-sm font-bold shadow hover:bg-teal-700 transition flex items-center gap-2 no-print">🖨️ Kisi-Kisi</button>
-                        <button onclick="downloadKisiKisiDoc()" class="bg-cyan-600 text-white px-3.5 py-2 rounded-xl text-sm font-bold shadow hover:bg-cyan-700 transition flex items-center gap-2 no-print">📥 Download Kisi-Kisi</button>
-                        <button onclick="printKartuSoal()" class="bg-amber-600 text-white px-3.5 py-2 rounded-xl text-sm font-bold shadow hover:bg-amber-700 transition flex items-center gap-2 no-print">🖨️ Kartu Soal</button>
-                        <button onclick="printReport('view-bank-soal', 'BANK SOAL DAN ASESMEN TERINTEGRASI')" class="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-slate-700 transition flex items-center gap-2 no-print">🖨️ Cetak Soal</button>
-                        <button onclick="downloadSoalDoc()" class="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-sm font-bold shadow hover:bg-emerald-700 transition flex items-center gap-2 no-print">📥 Download Soal</button>
-                        <button onclick="openModalKisiKisiAI()" class="bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-purple-700 transition flex items-center gap-2 no-print">🪄 Generate Kisi-Kisi AI</button>
-                        <button onclick="openModalQuestionAI()" class="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-indigo-700 transition">🪄 Generate Soal AI (AKM/HOTS)</button>
-                        <button onclick="openModalQuestion()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition">+ Tambah Soal Manual</button>
+                    <div class="flex gap-2 flex-wrap no-print">
+                        <button onclick="printKisiKisi()" class="btn btn-secondary">Cetak Kisi-Kisi</button>
+                        <button onclick="downloadKisiKisiDoc()" class="btn btn-secondary">Unduh Kisi-Kisi</button>
+                        <button onclick="printKartuSoal()" class="btn btn-secondary">Kartu Soal</button>
+                        <button onclick="printReport('view-bank-soal', 'BANK SOAL DAN ASESMEN TERINTEGRASI')" class="btn btn-secondary">Cetak Soal</button>
+                        <button onclick="downloadSoalDoc()" class="btn btn-secondary">Unduh Soal</button>
+                        <button onclick="openModalKisiKisiAI()" class="btn btn-ai">Susun Kisi-Kisi (AI)</button>
+                        <button onclick="openModalQuestionAI()" class="btn btn-ai">Susun Soal (AI)</button>
+                        <button onclick="openModalQuestion()" class="btn btn-primary">+ Tambah Soal</button>
                     </div>
                 </div>
                 
                 <div id="bankSoalMainContent" class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-4">
                     <div class="flex justify-between items-center flex-wrap gap-3">
-                        <input type="text" id="searchQuestion" placeholder="🔍 Cari teks soal atau kode..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderBankSoal()">
+                        <input type="text" id="searchQuestion" placeholder="Cari teks soal atau kode..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderBankSoal()">
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm text-left">
@@ -1024,13 +1054,13 @@
             <div id="view-portfolio" class="view-section space-y-6">
                 <div class="flex justify-between items-center flex-wrap gap-4">
                     <div>
-                        <h3 class="text-2xl font-bold text-slate-800">📁 Manajemen Portofolio Siswa</h3>
+                        <h3 class="text-2xl font-bold text-slate-800">Manajemen Portofolio Siswa</h3>
                         <p class="text-slate-500 text-sm">Kumpulkan dan kelola bukti karya, proyek, serta pencapaian siswa secara digital.</p>
                     </div>
                 </div>
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-4">
                     <div class="flex justify-between items-center flex-wrap gap-3">
-                        <input type="text" id="searchPortfolio" placeholder="🔍 Cari nama siswa..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderPortfolio()">
+                        <input type="text" id="searchPortfolio" placeholder="Cari nama siswa..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderPortfolio()">
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm text-left">
@@ -1070,7 +1100,7 @@
 
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-4">
                     <div class="flex justify-between items-center flex-wrap gap-3">
-                        <input type="text" id="searchAssignment" placeholder="🔍 Cari judul tugas..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderAssignments()">
+                        <input type="text" id="searchAssignment" placeholder="Cari judul tugas..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderAssignments()">
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm text-left">
@@ -1108,7 +1138,7 @@
                 <!-- TAB: DATA WALI -->
                 <div id="comm-wali" class="comm-content space-y-4">
                     <div class="flex justify-between items-center">
-                        <input type="text" id="searchGuardian" placeholder="🔍 Cari nama wali..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderGuardians()">
+                        <input type="text" id="searchGuardian" placeholder="Cari nama wali..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderGuardians()">
                         <button onclick="openModalGuardian()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition">+ Tambah Data Wali</button>
                     </div>
                     <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
@@ -1131,7 +1161,7 @@
                 <!-- TAB: CATATAN KOMUNIKASI -->
                 <div id="comm-log" class="comm-content space-y-4 hidden">
                      <div class="flex justify-between items-center flex-wrap gap-3">
-                        <input type="text" id="searchComm" placeholder="🔍 Cari topik atau catatan..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderCommunications()">
+                        <input type="text" id="searchComm" placeholder="Cari topik atau catatan..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderCommunications()">
                         <button onclick="openModalCommunication()" class="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-indigo-700 transition">+ Tambah Catatan</button>
                     </div>
                     <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
@@ -1160,9 +1190,9 @@
                             <select id="progStudentSelect" class="border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none min-w-[200px]" onchange="renderStudentProgress(this.value)"></select>
                         </div>
                         <div class="flex gap-2">
-                            <button onclick="saveProgressNarrative()" class="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow hover:bg-emerald-700 transition">💾 Simpan Catatan</button>
-                            <button data-ai onclick="generateProgressAI()" class="bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-indigo-200 transition flex items-center gap-2">🪄 Draft Narasi AI</button>
-                            <button onclick="printReport('view-communication', 'LAPORAN PERKEMBANGAN PESERTA DIDIK')" class="bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Laporan</button>
+                            <button onclick="saveProgressNarrative()" class="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow hover:bg-emerald-700 transition">Simpan Catatan</button>
+                            <button data-ai onclick="generateProgressAI()" class="bg-indigo-100 text-indigo-700 px-4 py-2 rounded-xl text-xs font-bold shadow-sm hover:bg-indigo-200 transition flex items-center gap-2">Draft Narasi AI</button>
+                            <button onclick="printReport('view-communication', 'LAPORAN PERKEMBANGAN PESERTA DIDIK')" class="bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">Cetak Laporan</button>
                         </div>
                     </div>
                     
@@ -1225,12 +1255,12 @@
                         <p class="text-slate-500 text-sm">Catat kehadiran peserta didik dan jurnal pelaksanaan pembelajaran harian.</p>
                     </div>
                     <div class="flex gap-2 no-print">
-                        <button onclick="printReport('view-attendance', 'JURNAL MENGAJAR HARIAN')" class="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Jurnal</button>
+                        <button onclick="printReport('view-attendance', 'JURNAL MENGAJAR HARIAN')" class="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-slate-700 transition">Cetak Jurnal</button>
                     </div>
                 </div>
 
                 <form id="formMeeting" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4 no-print" onsubmit="event.preventDefault(); saveAttendance();">
-                    <h4 class="font-bold text-base text-slate-800 border-b pb-2 flex items-center gap-2">📋 Identitas Pertemuan & Jurnal Pembelajaran</h4>
+                    <h4 class="font-bold text-base text-slate-800 border-b pb-2 flex items-center gap-2">Identitas Pertemuan & Jurnal Pembelajaran</h4>
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div>
                             <label class="block text-xs font-bold text-slate-700 mb-1">Pertemuan Ke- *</label>
@@ -1265,7 +1295,7 @@
                         </div>
                     </div>
                     <div class="pt-3 border-t border-slate-100 flex justify-between items-center">
-                        <button type="button" onclick="setAllPresent()" class="bg-emerald-100 text-emerald-800 px-4 py-2 rounded-xl text-xs font-bold border border-emerald-300 hover:bg-emerald-200 transition">🟢 Set Semua Hadir (H)</button>
+                        <button type="button" onclick="setAllPresent()" class="bg-emerald-100 text-emerald-800 px-4 py-2 rounded-xl text-xs font-bold border border-emerald-300 hover:bg-emerald-200 transition">Set Semua Hadir (H)</button>
                         <span class="text-xs text-slate-500 font-medium" id="attStudentCountInfo">Total Siswa: 0</span>
                     </div>
                 </form>
@@ -1287,7 +1317,7 @@
                         </table>
                     </div>
                     <div class="p-4 bg-slate-50/70 border-t border-slate-100 flex justify-end">
-                        <button onclick="saveAttendance()" class="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow hover:bg-blue-700 transition">💾 Simpan Absensi & Jurnal</button>
+                        <button onclick="saveAttendance()" class="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow hover:bg-blue-700 transition">Simpan Absensi & Jurnal</button>
                     </div>
                 </div>
 
@@ -1295,7 +1325,7 @@
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                     <div class="p-4 border-b font-bold bg-slate-50/70 text-slate-700 flex justify-between items-center">
                         <span>Riwayat Pertemuan & Jurnal Kelas</span>
-                        <input type="text" id="searchMeeting" placeholder="🔍 Cari materi..." class="px-3.5 py-1.5 border border-slate-200 rounded-xl text-xs w-56 focus:outline-none" oninput="renderMtgHistory()">
+                        <input type="text" id="searchMeeting" placeholder="Cari materi..." class="px-3.5 py-1.5 border border-slate-200 rounded-xl text-xs w-56 focus:outline-none" oninput="renderMtgHistory()">
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm text-left">
@@ -1324,8 +1354,8 @@
                         <p class="text-slate-500 text-sm">Akumulasi kehadiran peserta didik kelas aktif.</p>
                     </div>
                     <div class="flex gap-2 no-print">
-                        <button onclick="printReport('view-recap-attendance', 'REKAPITULASI KEHADIRAN PESERTA DIDIK')" class="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak</button>
-                        <button onclick="exportAttendanceCSV()" class="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-emerald-700 transition">📥 Export CSV</button>
+                        <button onclick="printReport('view-recap-attendance', 'REKAPITULASI KEHADIRAN PESERTA DIDIK')" class="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-slate-700 transition">Cetak</button>
+                        <button onclick="exportAttendanceCSV()" class="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-emerald-700 transition">Export CSV</button>
                     </div>
                 </div>
 
@@ -1338,7 +1368,7 @@
 
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                     <div class="p-4 border-b bg-slate-50/70 flex flex-wrap gap-3 justify-between items-center">
-                        <input type="text" id="searchRecapAtt" placeholder="🔍 Cari nama siswa..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-64 focus:outline-none" oninput="renderRecapAtt()">
+                        <input type="text" id="searchRecapAtt" placeholder="Cari nama siswa..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-64 focus:outline-none" oninput="renderRecapAtt()">
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm text-left">
@@ -1369,11 +1399,11 @@
                         <p class="text-slate-500 text-sm">Kelola asesmen Formatif, Sumatif, UTS, UAS, dan Nilai Akhir kelas aktif.</p>
                     </div>
                     <div class="flex gap-2 flex-wrap no-print">
-                        <button onclick="openAssessModal('Formatif')" class="bg-blue-100 text-blue-800 px-3.5 py-2 rounded-xl text-xs font-bold hover:bg-blue-200 transition">+ Formatif (Per TP)</button>
-                        <button onclick="openAssessModal('Sumatif')" class="bg-indigo-100 text-indigo-800 px-3.5 py-2 rounded-xl text-xs font-bold hover:bg-indigo-200 transition">+ Sumatif</button>
-                        <button onclick="analyzeSumatif()" class="bg-slate-100 text-slate-800 px-3.5 py-2 rounded-xl text-xs font-bold hover:bg-slate-200 transition">📊 Analisis Sumatif</button>
-                        <button onclick="openAssessModal('UTS')" class="bg-purple-100 text-purple-800 px-3.5 py-2 rounded-xl text-xs font-bold hover:bg-purple-200 transition">Input UTS</button>
-                        <button onclick="openAssessModal('UAS')" class="bg-teal-100 text-teal-800 px-3.5 py-2 rounded-xl text-xs font-bold hover:bg-teal-200 transition">Input UAS</button>
+                        <button onclick="openAssessModal('Formatif')" class="btn btn-primary">+ Formatif (Per TP)</button>
+                        <button onclick="openAssessModal('Sumatif')" class="btn btn-secondary">+ Sumatif</button>
+                        <button onclick="openAssessModal('UTS')" class="btn btn-secondary">Input UTS</button>
+                        <button onclick="openAssessModal('UAS')" class="btn btn-secondary">Input UAS</button>
+                        <button onclick="analyzeSumatif()" class="btn btn-secondary">Analisis Sumatif</button>
                     </div>
                 </div>
 
@@ -1389,10 +1419,10 @@
 
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                     <div class="p-4 border-b bg-slate-50/70 flex justify-between items-center flex-wrap gap-3">
-                        <input type="text" id="searchScore" placeholder="🔍 Cari siswa..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-64 focus:outline-none" oninput="renderRecapScores()">
+                        <input type="text" id="searchScore" placeholder="Cari siswa..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-64 focus:outline-none" oninput="renderRecapScores()">
                         <div class="flex gap-2">
-                            <button onclick="printReport('view-scores', 'REKAPITULASI NILAI AKHIR')" class="bg-slate-800 text-white px-3.5 py-2 rounded-xl text-xs font-bold hover:bg-slate-700 transition">🖨️ Cetak</button>
-                            <button onclick="exportScoresCSV()" class="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold hover:bg-emerald-700 transition">📥 Export CSV</button>
+                            <button onclick="printReport('view-scores', 'REKAPITULASI NILAI AKHIR')" class="bg-slate-800 text-white px-3.5 py-2 rounded-xl text-xs font-bold hover:bg-slate-700 transition">Cetak</button>
+                            <button onclick="exportScoresCSV()" class="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold hover:bg-emerald-700 transition">Export CSV</button>
                         </div>
                     </div>
                     <div class="overflow-x-auto">
@@ -1422,7 +1452,7 @@
             <div id="view-daily-analysis" class="view-section space-y-6">
                 <div class="flex justify-between items-center flex-wrap gap-4 no-print">
                     <div>
-                        <h3 class="text-2xl font-bold text-slate-800">📊 Analisis Ulangan Harian</h3>
+                        <h3 class="text-2xl font-bold text-slate-800">Analisis Ulangan Harian</h3>
                         <p class="text-slate-500 text-sm">Analisis butir soal, daya serap materi, dan ketuntasan klasikal secara otomatis.</p>
                     </div>
                     <div class="flex gap-2">
@@ -1462,7 +1492,7 @@
                         <h3 class="text-2xl font-bold text-slate-800">Remedial & Pengayaan</h3>
                         <p class="text-slate-500 text-sm">Identifikasi otomatis siswa remedial dan pengayaan kelas aktif.</p>
                     </div>
-                    <button data-ai id="btnRecommendAI" onclick="recommendFollowUpsAI()" class="no-print px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow hover:bg-indigo-700 transition">🪄 Rekomendasi Tindak Lanjut AI</button>
+                    <button data-ai id="btnRecommendAI" onclick="recommendFollowUpsAI()" class="no-print px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow hover:bg-indigo-700 transition">Rekomendasi Tindak Lanjut AI</button>
                 </div>
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                     <div class="overflow-x-auto">
@@ -1492,7 +1522,7 @@
                         <p class="text-slate-500 text-sm">Profil hasil belajar, deskripsi capaian otomatis, dan cetak rapor peserta didik.</p>
                     </div>
                     <div class="flex gap-2">
-                        <button data-ai onclick="generateAllNarration()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition">🪄 Generate Narasi Otomatis</button>
+                        <button data-ai onclick="generateAllNarration()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition">Generate Narasi Otomatis</button>
                     </div>
                 </div>
 
@@ -1503,8 +1533,8 @@
                             <select id="raporStudentSelect" class="border border-slate-200 rounded-xl px-4 py-2 text-sm focus:outline-none" onchange="renderStudentRapor(this.value)"></select>
                         </div>
                         <div class="flex gap-2">
-                            <button onclick="printStudentRapor()" class="bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Rapor Siswa</button>
-                            <button onclick="printAllRapor()" class="bg-blue-800 text-white px-4 py-2 rounded-xl text-xs font-bold shadow hover:bg-blue-900 transition">🖨️ Cetak Semua Rapor Kelas</button>
+                            <button onclick="printStudentRapor()" class="bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">Cetak Rapor Siswa</button>
+                            <button onclick="printAllRapor()" class="bg-blue-800 text-white px-4 py-2 rounded-xl text-xs font-bold shadow hover:bg-blue-900 transition">Cetak Semua Rapor Kelas</button>
                         </div>
                     </div>
 
@@ -1567,16 +1597,16 @@
             <div id="view-jurnal-refleksi" class="view-section space-y-6">
                 <div class="flex justify-between items-center flex-wrap gap-4">
                     <div>
-                        <h3 class="text-2xl font-bold text-slate-800">📝 Jurnal Refleksi & Evaluasi Guru Terintegrasi</h3>
+                        <h3 class="text-2xl font-bold text-slate-800">Jurnal Refleksi & Evaluasi Guru Terintegrasi</h3>
                         <p class="text-slate-500 text-sm">Dokumentasi pembelajaran, ketercapaian TP, kendala, solusi, dan refleksi mendalam.</p>
                     </div>
                     <button onclick="openModalJournal()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition">+ Tambah Jurnal Mengajar</button>
                 </div>
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-4">
                     <div class="flex justify-between items-center flex-wrap gap-3">
-                        <input type="text" id="searchJournal" placeholder="🔍 Cari materi atau topik jurnal..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderJournals()">
+                        <input type="text" id="searchJournal" placeholder="Cari materi atau topik jurnal..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderJournals()">
                         <div class="flex gap-2">
-                            <button onclick="printReport('view-jurnal-refleksi', 'REKAPITULASI JURNAL MENGAJAR')" class="bg-slate-800 text-white px-3.5 py-2 rounded-xl text-xs font-bold hover:bg-slate-700 transition">🖨️ Cetak Jurnal</button>
+                            <button onclick="printReport('view-jurnal-refleksi', 'REKAPITULASI JURNAL MENGAJAR')" class="bg-slate-800 text-white px-3.5 py-2 rounded-xl text-xs font-bold hover:bg-slate-700 transition">Cetak Jurnal</button>
                         </div>
                     </div>
                     <div class="overflow-x-auto">
@@ -1603,14 +1633,14 @@
             <div id="view-documents" class="view-section space-y-6">
                 <div class="flex justify-between items-center flex-wrap gap-4 no-print">
                     <div>
-                        <h3 class="text-2xl font-bold text-slate-800">✉️ Manajemen Surat & Dokumen Resmi</h3>
+                        <h3 class="text-2xl font-bold text-slate-800">Manajemen Surat & Dokumen Resmi</h3>
                         <p class="text-slate-500 text-sm">Buat, kelola, dan cetak surat resmi (Panggilan Wali, Pemberitahuan, dll) dengan kop surat.</p>
                     </div>
                     <button onclick="openModalDocument()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition flex items-center gap-2">+ Buat Surat Baru</button>
                 </div>
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 space-y-4 no-print" id="docListContainer">
                     <div class="flex justify-between items-center flex-wrap gap-3">
-                        <input type="text" id="searchDoc" placeholder="🔍 Cari nomor atau jenis surat..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderDocuments()">
+                        <input type="text" id="searchDoc" placeholder="Cari nomor atau jenis surat..." class="px-3.5 py-2 border border-slate-200 rounded-xl text-xs w-72 focus:outline-none" oninput="renderDocuments()">
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm text-left">
@@ -1671,406 +1701,408 @@
                 </div>
             </div>
 
-            <!-- VIEW: REPORTS -->
+            <!-- VIEW: REPORTS (Direktori Dokumen Terstruktur — Tanpa Kartu Berulang) -->
             <div id="view-reports" class="view-section space-y-6">
-                <div>
-                    <h3 class="text-2xl font-bold text-slate-800">🖨️ Pusat Laporan & Pencetakan</h3>
-                    <p class="text-slate-500 text-sm">Pusat pencetakan seluruh dokumen administrasi guru berstandar formal A4.</p>
-                </div>
-                
-                <h4 class="font-bold text-slate-700 border-b pb-2">Laporan Rekapitulasi Kelas (Langsung Cetak)</h4>
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
-                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
-                        <div><h4 class="font-bold text-sm mb-1 text-slate-800">📋 Daftar Peserta Didik</h4><p class="text-xs text-slate-500 mb-4">Daftar identitas dan nomor induk siswa.</p></div>
-                        <button onclick="printReport('view-students', 'DAFTAR PESERTA DIDIK')" class="bg-slate-800 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Laporan</button>
-                    </div>
-                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
-                        <div><h4 class="font-bold text-sm mb-1 text-slate-800">📅 Rekap Kehadiran</h4><p class="text-xs text-slate-500 mb-4">Akumulasi kehadiran H/S/I/A/D.</p></div>
-                        <button onclick="printReport('view-recap-attendance', 'REKAPITULASI KEHADIRAN PESERTA DIDIK')" class="bg-slate-800 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Laporan</button>
-                    </div>
-                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
-                        <div><h4 class="font-bold text-sm mb-1 text-slate-800">📝 Daftar Nilai Akhir</h4><p class="text-xs text-slate-500 mb-4">Daftar nilai, predikat, dan ketuntasan.</p></div>
-                        <button onclick="printReport('view-scores', 'DAFTAR NILAI DAN KETUNTASAN BELAJAR')" class="bg-slate-800 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Laporan</button>
-                    </div>
-                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
-                        <div><h4 class="font-bold text-sm mb-1 text-slate-800">📖 Jurnal Mengajar</h4><p class="text-xs text-slate-500 mb-4">Catatan harian dan absensi pertemuan.</p></div>
-                        <button onclick="printReport('view-attendance', 'JURNAL MENGAJAR HARIAN')" class="bg-slate-800 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Laporan</button>
-                    </div>
-                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
-                        <div><h4 class="font-bold text-sm mb-1 text-slate-800">🏦 Bank Soal & Asesmen</h4><p class="text-xs text-slate-500 mb-4">Daftar soal, kognitif, dan kesulitan.</p></div>
-                        <button onclick="printReport('view-bank-soal', 'BANK SOAL DAN ASESMEN TERINTEGRASI')" class="bg-slate-800 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Laporan</button>
-                    </div>
-                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
-                        <div><h4 class="font-bold text-sm mb-1 text-slate-800">📚 Rekap Tugas & LKPD</h4><p class="text-xs text-slate-500 mb-4">Daftar tugas, jenis, dan target pengumpulan.</p></div>
-                        <button onclick="printReport('view-assignments', 'REKAPITULASI TUGAS & PENGUMPULAN')" class="bg-slate-800 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Laporan</button>
-                    </div>
-                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
-                        <div><h4 class="font-bold text-sm mb-1 text-slate-800">🤖 Draf Modul Ajar (AI)</h4><p class="text-xs text-slate-500 mb-4">Cetak draf modul ajar hasil generate AI.</p></div>
-                        <button onclick="printReport('view-generator', 'MODUL AJAR KURIKULUM MERDEKA')" class="bg-slate-800 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Laporan</button>
-                    </div>
-                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
-                        <div><h4 class="font-bold text-sm mb-1 text-slate-800">📁 Rekap Portofolio</h4><p class="text-xs text-slate-500 mb-4">Jumlah karya dan bukti yang terkumpul.</p></div>
-                        <button onclick="printReport('view-portfolio', 'REKAPITULASI PORTOFOLIO SISWA')" class="bg-slate-800 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Laporan</button>
-                    </div>
-                    <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
-                        <div><h4 class="font-bold text-sm mb-1 text-slate-800">📊 Rekap Analisis Ulangan</h4><p class="text-xs text-slate-500 mb-4">Daftar rata-rata dan ketuntasan ulangan.</p></div>
-                        <button onclick="printReport('view-daily-analysis', 'REKAPITULASI ANALISIS ULANGAN HARIAN')" class="bg-slate-800 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-slate-700 transition">🖨️ Cetak Laporan</button>
-                    </div>
+                <div class="page-header">
+                    <h3 class="text-2xl text-slate-900">Pusat Laporan &amp; Pencetakan</h3>
+                    <p class="text-slate-500 text-xs mt-0.5">Cetak langsung rekapitulasi administrasi kelas dalam format dokumen A4 resmi.</p>
                 </div>
 
-                <h4 class="font-bold text-slate-700 border-b pb-2">Dokumen Spesifik (Pilih Siswa / Topik Terlebih Dahulu)</h4>
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                    <div class="bg-blue-50/50 p-5 rounded-2xl border border-blue-100 flex flex-col justify-between">
-                        <div><h4 class="font-bold text-sm mb-1 text-blue-900">📄 Rapor Hasil Belajar</h4><p class="text-xs text-blue-700/80 mb-4">Cetak dokumen pencapaian nilai per siswa.</p></div>
-                        <button onclick="switchView('hasbi-rapor')" class="bg-blue-600 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-blue-700 transition">Buka Menu Rapor ➔</button>
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                    <div class="lg:col-span-7 space-y-2">
+                        <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider px-1">Rekapitulasi Kelas (Siap Cetak)</h4>
+                        <div class="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">
+                            <div class="px-4 py-3 flex items-center justify-between gap-4">
+                                <div><p class="text-sm font-medium text-slate-900">Daftar Peserta Didik</p><p class="text-xs text-slate-500">Nomor induk, nama lengkap, dan jenis kelamin kelas aktif.</p></div>
+                                <button onclick="printReport('view-students', 'DAFTAR PESERTA DIDIK')" class="btn btn-secondary py-1.5 px-3 text-xs">Cetak</button>
+                            </div>
+                            <div class="px-4 py-3 flex items-center justify-between gap-4">
+                                <div><p class="text-sm font-medium text-slate-900">Rekapitulasi Kehadiran</p><p class="text-xs text-slate-500">Akumulasi pertemuan H/S/I/A dan persentase kehadiran.</p></div>
+                                <button onclick="printReport('view-recap-attendance', 'REKAPITULASI KEHADIRAN PESERTA DIDIK')" class="btn btn-secondary py-1.5 px-3 text-xs">Cetak</button>
+                            </div>
+                            <div class="px-4 py-3 flex items-center justify-between gap-4">
+                                <div><p class="text-sm font-medium text-slate-900">Daftar Nilai Akhir &amp; Ketuntasan</p><p class="text-xs text-slate-500">Rekap nilai Formatif, Sumatif, UTS, UAS, predikat, dan status tuntas.</p></div>
+                                <button onclick="printReport('view-scores', 'DAFTAR NILAI DAN KETUNTASAN BELAJAR')" class="btn btn-secondary py-1.5 px-3 text-xs">Cetak</button>
+                            </div>
+                            <div class="px-4 py-3 flex items-center justify-between gap-4">
+                                <div><p class="text-sm font-medium text-slate-900">Jurnal Mengajar Harian</p><p class="text-xs text-slate-500">Riwayat pertemuan, topik bahasan, dan metode pembelajaran.</p></div>
+                                <button onclick="printReport('view-attendance', 'JURNAL MENGAJAR HARIAN')" class="btn btn-secondary py-1.5 px-3 text-xs">Cetak</button>
+                            </div>
+                            <div class="px-4 py-3 flex items-center justify-between gap-4">
+                                <div><p class="text-sm font-medium text-slate-900">Bank Soal &amp; Asesmen</p><p class="text-xs text-slate-500">Daftar butir soal beserta level kognitif dan tingkat kesulitan.</p></div>
+                                <button onclick="printReport('view-bank-soal', 'BANK SOAL DAN ASESMEN TERINTEGRASI')" class="btn btn-secondary py-1.5 px-3 text-xs">Cetak</button>
+                            </div>
+                            <div class="px-4 py-3 flex items-center justify-between gap-4">
+                                <div><p class="text-sm font-medium text-slate-900">Rekap Tugas &amp; LKPD</p><p class="text-xs text-slate-500">Daftar penugasan, tenggat waktu, dan progres pengumpulan.</p></div>
+                                <button onclick="printReport('view-assignments', 'REKAPITULASI TUGAS & PENGUMPULAN')" class="btn btn-secondary py-1.5 px-3 text-xs">Cetak</button>
+                            </div>
+                            <div class="px-4 py-3 flex items-center justify-between gap-4">
+                                <div><p class="text-sm font-medium text-slate-900">Draf Modul Ajar</p><p class="text-xs text-slate-500">Dokumen modul ajar aktif pada menu Generator.</p></div>
+                                <button onclick="printReport('view-generator', 'MODUL AJAR KURIKULUM MERDEKA')" class="btn btn-secondary py-1.5 px-3 text-xs">Cetak</button>
+                            </div>
+                            <div class="px-4 py-3 flex items-center justify-between gap-4">
+                                <div><p class="text-sm font-medium text-slate-900">Rekap Portofolio Karya</p><p class="text-xs text-slate-500">Jumlah bukti karya dan penugasan per peserta didik.</p></div>
+                                <button onclick="printReport('view-portfolio', 'REKAPITULASI PORTOFOLIO SISWA')" class="btn btn-secondary py-1.5 px-3 text-xs">Cetak</button>
+                            </div>
+                            <div class="px-4 py-3 flex items-center justify-between gap-4">
+                                <div><p class="text-sm font-medium text-slate-900">Rekap Analisis Ulangan</p><p class="text-xs text-slate-500">Ringkasan rata-rata dan ketuntasan ulangan harian.</p></div>
+                                <button onclick="printReport('view-daily-analysis', 'REKAPITULASI ANALISIS ULANGAN HARIAN')" class="btn btn-secondary py-1.5 px-3 text-xs">Cetak</button>
+                            </div>
+                        </div>
                     </div>
-                    <div class="bg-indigo-50/50 p-5 rounded-2xl border border-indigo-100 flex flex-col justify-between">
-                        <div><h4 class="font-bold text-sm mb-1 text-indigo-900">📈 Laporan Perkembangan</h4><p class="text-xs text-indigo-700/80 mb-4">Cetak catatan perkembangan & tindak lanjut.</p></div>
-                        <button onclick="switchView('communication'); switchCommTab('progress');" class="bg-indigo-600 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-indigo-700 transition">Buka Menu Komunikasi ➔</button>
-                    </div>
-                    <div class="bg-teal-50/50 p-5 rounded-2xl border border-teal-100 flex flex-col justify-between">
-                        <div><h4 class="font-bold text-sm mb-1 text-teal-900">✉️ Surat & Dokumen Resmi</h4><p class="text-xs text-teal-700/80 mb-4">Cetak surat pemanggilan atau pemberitahuan.</p></div>
-                        <button onclick="switchView('documents')" class="bg-teal-600 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-teal-700 transition">Buka Menu Dokumen ➔</button>
-                    </div>
-                    <div class="bg-orange-50/50 p-5 rounded-2xl border border-orange-100 flex flex-col justify-between">
-                        <div><h4 class="font-bold text-sm mb-1 text-orange-900">📊 Analisis Butir Soal</h4><p class="text-xs text-orange-700/80 mb-4">Cetak rincian daya serap butir soal per topik.</p></div>
-                        <button onclick="switchView('daily-analysis')" class="bg-orange-600 text-white py-2 rounded-xl text-xs font-bold shadow hover:bg-orange-700 transition">Buka Menu Analisis ➔</button>
+
+                    <div class="lg:col-span-5 space-y-2">
+                        <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider px-1">Dokumen Individual (Pilih Siswa/Topik)</h4>
+                        <div class="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">
+                            <div class="px-4 py-3.5 flex items-center justify-between gap-3">
+                                <div><p class="text-sm font-medium text-slate-900">Rapor Hasil Belajar</p><p class="text-xs text-slate-500">Capaian nilai akhir dan deskripsi per siswa.</p></div>
+                                <button onclick="switchView('hasbi-rapor')" class="btn btn-primary py-1.5 px-3 text-xs">Buka Rapor</button>
+                            </div>
+                            <div class="px-4 py-3.5 flex items-center justify-between gap-3">
+                                <div><p class="text-sm font-medium text-slate-900">Laporan Perkembangan</p><p class="text-xs text-slate-500">Catatan perkembangan akademik &amp; komunikasi wali.</p></div>
+                                <button onclick="switchView('communication'); switchCommTab('progress');" class="btn btn-secondary py-1.5 px-3 text-xs">Buka Menu</button>
+                            </div>
+                            <div class="px-4 py-3.5 flex items-center justify-between gap-3">
+                                <div><p class="text-sm font-medium text-slate-900">Surat &amp; Dokumen Resmi</p><p class="text-xs text-slate-500">Surat pemanggilan wali, pemberitahuan, atau apresiasi.</p></div>
+                                <button onclick="switchView('documents')" class="btn btn-secondary py-1.5 px-3 text-xs">Buka Menu</button>
+                            </div>
+                            <div class="px-4 py-3.5 flex items-center justify-between gap-3">
+                                <div><p class="text-sm font-medium text-slate-900">Analisis Butir Soal</p><p class="text-xs text-slate-500">Daya pembeda, tingkat kesukaran, dan daya serap.</p></div>
+                                <button onclick="switchView('daily-analysis')" class="btn btn-secondary py-1.5 px-3 text-xs">Buka Menu</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- VIEW: BACKUP & RESTORE -->
             <div id="view-backup" class="view-section space-y-6">
-                <div class="backup-reminder hidden bg-amber-50 border border-amber-200 text-amber-900 rounded-xl px-4 py-3 text-sm flex items-center justify-between gap-3 flex-wrap no-print"><span data-reminder-text>Backup belum dibuat.</span><button onclick="switchView('backup')" class="bg-amber-600 text-white px-3 py-1.5 rounded-lg text-xs font-bold">Buka Backup</button></div>
-                <div>
-                    <h3 class="text-2xl font-bold text-slate-800">Backup & Restore Data</h3>
-                    <p class="text-slate-500 text-sm">Amankan seluruh data administrasi atau pulihkan dari file cadangan JSON.</p>
+                <div class="backup-reminder hidden bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-4 py-2.5 text-xs flex items-center justify-between gap-3 flex-wrap no-print"><span data-reminder-text>Cadangan data belum dibuat.</span><button onclick="switchView('backup')" class="btn btn-secondary py-1 px-2.5 text-xs">Buka Cadangan</button></div>
+                <div class="page-header">
+                    <h3 class="text-2xl text-slate-900">Cadangan &amp; Pemulihan Data</h3>
+                    <p class="text-slate-500 text-xs mt-0.5">Ekspor salinan arsip JSON ke perangkat lokal atau pulihkan dari berkas cadangan sebelumnya.</p>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 text-center space-y-4">
-                        <div class="text-4xl">💾</div>
-                        <h4 class="font-bold text-lg text-slate-800">Backup Data JSON</h4>
-                        <p class="text-xs text-slate-500">Unduh seluruh data aplikasi ke perangkat Anda (format v2, berversi). Backup lama tetap bisa dipulihkan.</p>
-                        <button onclick="backupJSON()" class="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold w-full shadow hover:bg-blue-700 transition">Unduh Backup Sekarang</button>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl">
+                    <div class="bg-white p-6 border border-slate-200 rounded-lg flex flex-col justify-between space-y-4">
+                        <div class="space-y-1.5">
+                            <h4 class="font-semibold text-base text-slate-900">Unduh Berkas Cadangan (JSON)</h4>
+                            <p class="text-xs text-slate-500 leading-relaxed">Menyimpan seluruh data periode, kelas, nilai, dan perangkat ajar ke dalam satu berkas JSON berversi (v2) yang dapat disimpan secara luring.</p>
+                        </div>
+                        <div class="pt-2">
+                            <button onclick="backupJSON()" class="btn btn-primary w-full py-2.5">Unduh Cadangan JSON</button>
+                        </div>
                     </div>
-                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 text-center space-y-4">
-                        <div class="text-4xl">♻️</div>
-                        <h4 class="font-bold text-lg text-slate-800">Restore Data JSON</h4>
-                        <p class="text-xs text-slate-500">Pulihkan data dari file backup sebelumnya.</p>
-                        <input type="file" id="fileRestore" accept=".json" class="block w-full text-xs border border-slate-200 p-2.5 rounded-xl bg-slate-50">
-                        <select id="restoreMode" class="block w-full text-xs border border-slate-200 p-2.5 rounded-xl bg-white">
-                            <option value="gabung">Gabung (aman): tambah data baru, tidak menghapus</option>
-                            <option value="timpa">Timpa: ganti seluruh data saat ini</option>
+                    <div class="bg-white p-6 border border-slate-200 rounded-lg space-y-3.5">
+                        <div class="space-y-1">
+                            <h4 class="font-semibold text-base text-slate-900">Pulihkan dari Berkas JSON</h4>
+                            <p class="text-xs text-slate-500 leading-relaxed">Pilih berkas cadangan JSON lalu tentukan metode penggabungan data.</p>
+                        </div>
+                        <input type="file" id="fileRestore" accept=".json" class="block w-full text-xs border border-slate-300 p-2 rounded-md bg-slate-50">
+                        <select id="restoreMode" class="block w-full text-xs border border-slate-300 p-2.5 rounded-md bg-white">
+                            <option value="gabung">Mode Gabung (Aman — tambah data baru tanpa menghapus)</option>
+                            <option value="timpa">Mode Timpa (Ganti seluruh data saat ini)</option>
                         </select>
-                        <button onclick="restoreJSON()" class="bg-red-600 text-white px-6 py-2.5 rounded-xl font-bold w-full shadow hover:bg-red-700 transition">Mulai Proses Restore</button>
+                        <button onclick="restoreJSON()" class="btn btn-danger-outline w-full py-2.5">Jalankan Pemulihan Data</button>
                     </div>
                 </div>
             </div>
 
-            <!-- VIEW: SETTINGS -->
-            <div id="view-settings" class="view-section space-y-6 pb-10">
-                <div>
-                    <h3 class="text-2xl font-bold text-slate-800">Pengaturan Sistem & Periode</h3>
-                    <p class="text-slate-500 text-sm">Kelola identitas sekolah, guru, bobot nilai, dan tahun pelajaran.</p>
-                </div>
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4 max-w-3xl">
-                    <div class="border-b pb-3 flex items-center justify-between gap-2 flex-wrap">
-                        <div>
-                            <h4 class="font-bold text-slate-800">Identitas Sekolah &amp; Biodata Guru</h4>
-                            <p class="text-xs text-slate-500">Data ini tampil pada header dan seluruh cetakan dokumen resmi.</p>
-                        </div>
-                        <button type="button" onclick="Auth.openProfileModal('edit')" class="text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3.5 py-1.5 rounded-xl transition flex items-center gap-1.5">👤 Profil &amp; Kata Sandi</button>
+            <!-- VIEW: SETTINGS (Komposisi Editorial 2-Kolom) -->
+            <div id="view-settings" class="view-section space-y-8 pb-12">
+                <div class="page-header flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                        <h3 class="text-2xl text-slate-900">Pengaturan Sistem &amp; Akademik</h3>
+                        <p class="text-slate-500 text-xs mt-0.5">Konfigurasi identitas satuan pendidikan, aturan perhitungan nilai akhir, dan layanan AI.</p>
                     </div>
-                    <div id="settingsReadonlyNote" class="hidden bg-slate-50 border border-slate-200 text-slate-600 rounded-xl p-3 text-xs">🔒 Identitas sekolah dan periode aktif diatur oleh <b>Admin Sekolah</b>. Anda tetap dapat mengatur <b>Mata Pelajaran</b>, <b>Fase</b>, dan <b>Biodata Guru</b> Anda.</div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Nama Sekolah</label><input type="text" id="setSchool" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm"></div>
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                            <div class="sm:col-span-2">
-                                <label class="block text-xs font-bold text-slate-700 mb-1">Mata Pelajaran</label>
-                                <select id="setSubject" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm">
-                                    <option value="Pendidikan Agama dan Budi Pekerti">Pendidikan Agama dan Budi Pekerti</option>
-                                    <option value="Pendidikan Pancasila">Pendidikan Pancasila</option>
-                                    <option value="Bahasa Indonesia">Bahasa Indonesia</option>
-                                    <option value="Matematika">Matematika</option>
-                                    <option value="Ilmu Pengetahuan Alam (IPA)">Ilmu Pengetahuan Alam (IPA)</option>
-                                    <option value="Ilmu Pengetahuan Sosial (IPS)">Ilmu Pengetahuan Sosial (IPS)</option>
-                                    <option value="Bahasa Inggris">Bahasa Inggris</option>
-                                    <option value="PJOK">Pendidikan Jasmani Olahraga dan Kesehatan (PJOK)</option>
-                                    <option value="Informatika">Informatika</option>
-                                    <option value="Seni Budaya / Prakarya">Seni Budaya / Prakarya</option>
-                                    <option value="Muatan Lokal">Muatan Lokal</option>
-                                    <option value="Bimbingan Konseling (BK)">Bimbingan Konseling (BK)</option>
+                    <button type="button" onclick="Auth.openProfileModal('edit')" class="btn btn-secondary">Profil &amp; Kata Sandi Saya</button>
+                </div>
+
+                <!-- Seksi 1: Identitas Sekolah & Guru -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                    <div class="lg:col-span-4 space-y-1">
+                        <h4 class="font-semibold text-sm text-slate-900">Identitas Sekolah &amp; Pendidik</h4>
+                        <p class="text-xs text-slate-500 leading-relaxed">Digunakan secara otomatis pada kop surat, lembar pengesahan modul ajar, serta tanda tangan rapor.</p>
+                    </div>
+                    <div class="lg:col-span-8 bg-white p-6 border border-slate-200 rounded-lg space-y-4">
+                        <div id="settingsReadonlyNote" class="hidden bg-slate-50 border border-slate-200 text-slate-600 rounded-md p-3 text-xs">Identitas sekolah dan periode aktif diatur terpusat oleh <b>Admin Sekolah</b>. Anda tetap dapat memperbarui mata pelajaran, fase, dan biodata pendidik Anda.</div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div><label class="block text-xs mb-1">Nama Satuan Pendidikan</label><input type="text" id="setSchool" class="w-full border px-3 py-2 rounded-md text-sm"></div>
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                <div class="sm:col-span-2">
+                                    <label class="block text-xs mb-1">Mata Pelajaran</label>
+                                    <select id="setSubject" class="w-full border px-3 py-2 rounded-md text-sm">
+                                        <option value="Pendidikan Agama dan Budi Pekerti">Pendidikan Agama dan Budi Pekerti</option>
+                                        <option value="Pendidikan Pancasila">Pendidikan Pancasila</option>
+                                        <option value="Bahasa Indonesia">Bahasa Indonesia</option>
+                                        <option value="Matematika">Matematika</option>
+                                        <option value="Ilmu Pengetahuan Alam (IPA)">Ilmu Pengetahuan Alam (IPA)</option>
+                                        <option value="Ilmu Pengetahuan Sosial (IPS)">Ilmu Pengetahuan Sosial (IPS)</option>
+                                        <option value="Bahasa Inggris">Bahasa Inggris</option>
+                                        <option value="PJOK">Pendidikan Jasmani Olahraga dan Kesehatan (PJOK)</option>
+                                        <option value="Informatika">Informatika</option>
+                                        <option value="Seni Budaya / Prakarya">Seni Budaya / Prakarya</option>
+                                        <option value="Muatan Lokal">Muatan Lokal</option>
+                                        <option value="Bimbingan Konseling (BK)">Bimbingan Konseling (BK)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs mb-1">Fase</label>
+                                    <select id="setFase" class="w-full border px-3 py-2 rounded-md text-sm">
+                                        <option value="A">Fase A</option>
+                                        <option value="B">Fase B</option>
+                                        <option value="C">Fase C</option>
+                                        <option value="D">Fase D</option>
+                                        <option value="E">Fase E</option>
+                                        <option value="F">Fase F</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div><label class="block text-xs mb-1">Tahun Pelajaran</label><input type="text" id="setAcademicYear" placeholder="2026/2027" class="w-full border px-3 py-2 rounded-md text-sm"></div>
+                            <div>
+                                <label class="block text-xs mb-1">Semester</label>
+                                <select id="setSemester" class="w-full border px-3 py-2 rounded-md text-sm">
+                                    <option value="GANJIL">Ganjil</option>
+                                    <option value="GENAP">Genap</option>
                                 </select>
+                            </div>
+                            <div class="col-span-1 md:col-span-2 border-t border-slate-100 pt-3 mt-1"><h5 class="text-xs font-semibold text-slate-800">Data Pendidik &amp; Kepala Sekolah</h5></div>
+                            <div><label class="block text-xs mb-1">Nama Lengkap Guru</label><input type="text" id="setTeacher" class="w-full border px-3 py-2 rounded-md text-sm"></div>
+                            <div><label class="block text-xs mb-1">NIP / NUPTK Guru</label><input type="text" id="setNipTeacher" placeholder="19800101..." class="w-full border px-3 py-2 rounded-md text-sm"></div>
+                            <div><label class="block text-xs mb-1">Pangkat / Jabatan</label><input type="text" id="setPangkatTeacher" placeholder="Penata Muda / Guru Mapel" class="w-full border px-3 py-2 rounded-md text-sm"></div>
+                            <div><label class="block text-xs mb-1">No. Telepon / WhatsApp</label><input type="text" id="setPhoneTeacher" placeholder="0812..." class="w-full border px-3 py-2 rounded-md text-sm"></div>
+                            <div><label class="block text-xs mb-1">Kepala Sekolah</label><input type="text" id="setPrincipal" class="w-full border px-3 py-2 rounded-md text-sm"></div>
+                            <div><label class="block text-xs mb-1">NIP Kepala Sekolah</label><input type="text" id="setNipPrincipal" placeholder="19700101..." class="w-full border px-3 py-2 rounded-md text-sm"></div>
+                        </div>
+                        <div class="pt-2 flex justify-end">
+                            <button onclick="saveSchoolSettings()" class="btn btn-primary">Simpan Identitas</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Seksi 2: Penilaian & Ketuntasan -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start pt-6 border-t border-slate-200">
+                    <div class="lg:col-span-4 space-y-1">
+                        <h4 class="font-semibold text-sm text-slate-900">Aturan Penilaian &amp; KKTP</h4>
+                        <p class="text-xs text-slate-500 leading-relaxed">Menentukan bobot nilai akhir (wajib berjumlah 100%), batas ketuntasan minimal, serta rentang predikat rapor.</p>
+                    </div>
+                    <div class="lg:col-span-8 bg-white p-6 border border-slate-200 rounded-lg space-y-4">
+                        <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+                            <div><label class="block text-xs mb-1">KKTP</label><input type="number" id="setKktp" min="0" max="100" step="0.1" class="w-full border px-3 py-2 rounded-md text-sm"></div>
+                            <div><label class="block text-xs mb-1">Formatif (%)</label><input type="number" id="setWForm" min="0" max="100" step="0.1" oninput="updateWeightTotal()" class="w-full border px-3 py-2 rounded-md text-sm"></div>
+                            <div><label class="block text-xs mb-1">Sumatif (%)</label><input type="number" id="setWSum" min="0" max="100" step="0.1" oninput="updateWeightTotal()" class="w-full border px-3 py-2 rounded-md text-sm"></div>
+                            <div><label class="block text-xs mb-1">UTS (%)</label><input type="number" id="setWUts" min="0" max="100" step="0.1" oninput="updateWeightTotal()" class="w-full border px-3 py-2 rounded-md text-sm"></div>
+                            <div><label class="block text-xs mb-1">UAS (%)</label><input type="number" id="setWUas" min="0" max="100" step="0.1" oninput="updateWeightTotal()" class="w-full border px-3 py-2 rounded-md text-sm"></div>
+                        </div>
+                        <div id="setWeightTotal" class="text-xs font-semibold"></div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div><label class="block text-xs mb-1">Kebijakan komponen nilai kosong</label>
+                                <select id="setMissingPolicy" class="w-full border px-3 py-2 rounded-md text-sm">
+                                    <option value="incomplete">Nilai akhir tidak dihitung (Belum Lengkap)</option>
+                                    <option value="partial">Hitung sementara dari komponen yang ada</option>
+                                </select></div>
+                            <div><label class="block text-xs mb-1">Perlakuan nilai remedial</label>
+                                <select id="setRemedialMode" class="w-full border px-3 py-2 rounded-md text-sm">
+                                    <option value="catat">Hanya dicatat (nilai akhir tidak berubah)</option>
+                                    <option value="kktp">Naikkan nilai akhir maksimal ke batas KKTP</option>
+                                </select></div>
+                        </div>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div><label class="block text-xs mb-1">Min. Hadir (%)</label><input type="number" id="setAttMin" min="0" max="100" step="0.1" class="w-full border px-3 py-2 rounded-md text-sm"></div>
+                            <div><label class="block text-xs mb-1">Batas Predikat A</label><input type="number" id="setPredA" min="0" max="100" step="0.1" class="w-full border px-3 py-2 rounded-md text-sm"></div>
+                            <div><label class="block text-xs mb-1">Batas Predikat B</label><input type="number" id="setPredB" min="0" max="100" step="0.1" class="w-full border px-3 py-2 rounded-md text-sm"></div>
+                            <div><label class="block text-xs mb-1">Batas Predikat C</label><input type="number" id="setPredC" min="0" max="100" step="0.1" class="w-full border px-3 py-2 rounded-md text-sm"></div>
+                        </div>
+                        <div class="space-y-2 pt-1">
+                            <label class="flex items-center gap-2 text-xs text-slate-700"><input type="checkbox" id="setAttPenalty"> Kurangi nilai akhir secara proporsional bila kehadiran di bawah ambang</label>
+                            <label class="flex items-center gap-2 text-xs text-slate-700"><input type="checkbox" id="setAttRequired"> Kehadiran minimal menjadi syarat kelulusan ketuntasan</label>
+                        </div>
+                        <div id="gradingErrors" class="hidden text-xs bg-red-50 text-red-700 border border-red-200 rounded-md p-3"></div>
+                        <div class="pt-2 flex justify-end">
+                            <button onclick="saveGradingSettings()" class="btn btn-primary">Simpan Aturan Penilaian</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Seksi 3: Asisten AI (Google Gemini) -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start pt-6 border-t border-slate-200" id="aiSettingsCard">
+                    <div class="lg:col-span-4 space-y-1">
+                        <h4 class="font-semibold text-sm text-slate-900">Asisten Penyusunan (Gemini)</h4>
+                        <p class="text-xs text-slate-500 leading-relaxed">Membantu menyusun draf analisis CP, modul ajar, kisi-kisi soal, serta narasi rapor dengan perlindungan anonimisasi data siswa.</p>
+                    </div>
+                    <div class="lg:col-span-8 bg-white p-6 border border-slate-200 rounded-lg space-y-4">
+                        <label class="flex items-center gap-2 text-sm font-medium text-slate-900"><input type="checkbox" id="setAiEnabled"> Aktifkan fitur asisten AI</label>
+                        <div id="aiManagedNote" class="hidden text-xs bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-md p-3">Koneksi AI telah dikonfigurasi oleh sekolah. Aktifkan fitur, centang persetujuan privasi, lalu klik Simpan.</div>
+                        <label id="aiCustomRow" class="hidden flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" id="setAiCustom" onchange="AIUI.applyConnVisibility()"> Gunakan konfigurasi proxy atau kunci API mandiri (lanjutan)</label>
+                        <div id="aiConnGroup" class="space-y-3.5">
+                            <div>
+                                <label class="block text-xs mb-1">Metode Koneksi</label>
+                                <select id="setAiMode" onchange="AIUI.onModeChange()" class="w-full border px-3 py-2 rounded-md text-sm">
+                                    <option value="proxy">Proxy Google Apps Script (Disarankan)</option>
+                                    <option value="direct">Langsung dengan API Key di Browser</option>
+                                </select>
+                            </div>
+                            <div id="aiProxyRow">
+                                <label class="block text-xs mb-1">URL Web App Apps Script (/exec)</label>
+                                <input type="url" id="setAiProxyUrl" placeholder="https://script.google.com/macros/s/.../exec" class="w-full border px-3 py-2 rounded-md text-sm">
                             </div>
                             <div>
-                                <label class="block text-xs font-bold text-slate-700 mb-1">Fase</label>
-                                <select id="setFase" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
-                                    <option value="A">Fase A</option>
-                                    <option value="B">Fase B</option>
-                                    <option value="C">Fase C</option>
-                                    <option value="D">Fase D</option>
-                                    <option value="E">Fase E</option>
-                                    <option value="F">Fase F</option>
-                                </select>
+                                <label id="aiSecretLabel" class="block text-xs mb-1"></label>
+                                <input type="password" id="setAiSecret" autocomplete="off" class="w-full border px-3 py-2 rounded-md text-sm">
+                                <div id="aiDirectWarn" class="hidden text-[11px] text-amber-700 mt-1">Kunci yang disimpan di browser dapat diakses pengguna perangkat ini. Gunakan kunci khusus dan batasi kuotanya.</div>
                             </div>
                         </div>
-                        
-                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Tahun Pelajaran</label><input type="text" id="setAcademicYear" placeholder="Contoh: 2026/2027" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm"></div>
-                        <div>
-                            <label class="block text-xs font-bold text-slate-700 mb-1">Semester</label>
-                            <select id="setSemester" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm">
-                                <option value="GANJIL">Ganjil</option>
-                                <option value="GENAP">Genap</option>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                            <div>
+                                <label class="block text-xs mb-1">Model Utama</label>
+                                <select id="setAiModelSelect" onchange="AIUI.onModelChange('setAiModelSelect', 'setAiModel')" class="w-full border px-3 py-2 rounded-md text-sm"></select>
+                                <input type="text" id="setAiModel" placeholder="gemini-3.6-flash" class="hidden mt-2 w-full border px-3 py-2 rounded-md text-sm">
+                                <div class="flex items-center gap-2 mt-1">
+                                    <button id="aiLoadModelsBtn" type="button" onclick="AIUI.loadModels()" class="text-[11px] font-medium text-blue-700 hover:underline">Muat daftar model</button>
+                                    <span id="aiModelNote" class="text-[11px] text-slate-500"></span>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs mb-1">Model Cadangan (Opsional)</label>
+                                <select id="setAiFallbackSelect" onchange="AIUI.onModelChange('setAiFallbackSelect', 'setAiFallback')" class="w-full border px-3 py-2 rounded-md text-sm"></select>
+                                <input type="text" id="setAiFallback" placeholder="Nama model cadangan" class="hidden mt-2 w-full border px-3 py-2 rounded-md text-sm">
+                                <div class="text-[11px] text-slate-500 mt-1">Digunakan otomatis bila model utama sedang padat (5xx).</div>
+                            </div>
+                        </div>
+                        <div class="space-y-2 pt-1 border-t border-slate-100">
+                            <label class="flex items-start gap-2 text-xs text-slate-700"><input type="checkbox" id="setAiPrivacy" class="mt-0.5"> <span>Saya memahami bahwa permintaan AI diproses oleh Google Gemini dan identitas siswa dianonimkan menjadi kode sebelum dikirim.</span></label>
+                            <label class="flex items-start gap-2 text-xs text-slate-500"><input type="checkbox" id="setAiAllowNames" class="mt-0.5"> <span>Izinkan pengiriman nama asli siswa (tidak disarankan).</span></label>
+                            <label class="flex items-start gap-2 text-xs text-slate-700"><input type="checkbox" id="setAiTerse" class="mt-0.5"> <span>Gunakan gaya ringkas (hemat kuota token) untuk tafsiran analisis ulangan &amp; rekomendasi tindak lanjut.</span></label>
+                        </div>
+                        <div id="aiStatusMsg" class="hidden"></div>
+                        <div id="aiUsageInfo" class="text-[11px] text-slate-500"></div>
+                        <div class="flex flex-wrap justify-end gap-2 pt-1">
+                            <button id="aiClearBtn" onclick="AIUI.clearSecret()" class="btn btn-danger-outline">Hapus Kunci</button>
+                            <button id="aiTestBtn" onclick="AIUI.test()" class="btn btn-secondary">Uji Koneksi</button>
+                            <button onclick="AIUI.save()" class="btn btn-primary">Simpan Pengaturan AI</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Seksi 4: Anggota Sekolah (Khusus Admin Mode Cloud) -->
+                <div id="adminTeamCard" data-admin-only class="hidden grid grid-cols-1 lg:grid-cols-12 gap-6 items-start pt-6 border-t border-slate-200">
+                    <div class="lg:col-span-4 space-y-1">
+                        <h4 class="font-semibold text-sm text-slate-900">Anggota &amp; Hak Akses Sekolah</h4>
+                        <p class="text-xs text-slate-500 leading-relaxed">Tetapkan peran email sebelum pendaftaran, ubah hak akses Admin/Guru, atau buat kata sandi sementara bagi guru yang lupa sandi.</p>
+                    </div>
+                    <div class="lg:col-span-8 bg-white p-6 border border-slate-200 rounded-lg space-y-4">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-semibold text-slate-700">Tetapkan Peran Email Baru</span>
+                            <button type="button" onclick="Auth.loadAdminTeam()" class="btn btn-ghost py-1 px-2.5 text-xs">Muat Ulang</button>
+                        </div>
+                        <form id="formInviteTeacher" onsubmit="Auth.inviteTeacher(event)" class="flex flex-col sm:flex-row gap-2">
+                            <input type="email" id="inviteEmail" placeholder="nama.guru@email.com" class="flex-1 border px-3 py-2 rounded-md text-sm" required>
+                            <select id="inviteRole" class="border px-3 py-2 rounded-md text-sm">
+                                <option value="teacher">Guru Mapel</option>
+                                <option value="admin">Admin Sekolah</option>
                             </select>
+                            <button type="submit" id="btnInviteTeacher" class="btn btn-primary">Simpan Peran</button>
+                        </form>
+                        <div id="adminTeamMsg" class="hidden"></div>
+                        <div class="space-y-2">
+                            <h5 class="text-xs font-medium text-slate-500">Menunggu Pendaftaran</h5>
+                            <div id="adminInviteList" class="space-y-2"></div>
                         </div>
-                        
-                        <div class="col-span-1 md:col-span-2 border-t pt-3 mt-1"><h5 class="text-sm font-bold text-slate-700">Biodata Pendidik &amp; Pimpinan</h5></div>
-                        
-                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Nama Lengkap Guru</label><input type="text" id="setTeacher" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm"></div>
-                        <div><label class="block text-xs font-bold text-slate-700 mb-1">NIP / NUPTK Guru</label><input type="text" id="setNipTeacher" placeholder="Contoh: 19800101..." class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm"></div>
-                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Pangkat / Jabatan</label><input type="text" id="setPangkatTeacher" placeholder="Contoh: Penata Muda / Guru Mapel" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm"></div>
-                        <div><label class="block text-xs font-bold text-slate-700 mb-1">No. Telepon / WhatsApp</label><input type="text" id="setPhoneTeacher" placeholder="Contoh: 0812..." class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm"></div>
-                        
-                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Kepala Sekolah</label><input type="text" id="setPrincipal" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm"></div>
-                        <div><label class="block text-xs font-bold text-slate-700 mb-1">NIP Kepala Sekolah</label><input type="text" id="setNipPrincipal" placeholder="Contoh: 19700101..." class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm"></div>
-                    </div>
-                    <button onclick="saveSchoolSettings()" class="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow hover:bg-blue-700 transition mt-2">Simpan Pengaturan</button>
-                </div>
-
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4 max-w-3xl mt-6">
-                    <h4 class="font-bold text-slate-800 border-b pb-2">Penilaian &amp; Ketuntasan</h4>
-                    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-                        <div><label class="block text-xs font-bold text-slate-700 mb-1">KKTP</label><input type="number" id="setKktp" min="0" max="100" step="0.1" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm"></div>
-                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Bobot Formatif (%)</label><input type="number" id="setWForm" min="0" max="100" step="0.1" oninput="updateWeightTotal()" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm"></div>
-                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Bobot Sumatif (%)</label><input type="number" id="setWSum" min="0" max="100" step="0.1" oninput="updateWeightTotal()" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm"></div>
-                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Bobot UTS (%)</label><input type="number" id="setWUts" min="0" max="100" step="0.1" oninput="updateWeightTotal()" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm"></div>
-                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Bobot UAS (%)</label><input type="number" id="setWUas" min="0" max="100" step="0.1" oninput="updateWeightTotal()" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm"></div>
-                    </div>
-                    <div id="setWeightTotal" class="text-xs font-bold"></div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Jika ada komponen nilai kosong</label>
-                            <select id="setMissingPolicy" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
-                                <option value="incomplete">Nilai akhir tidak dihitung (Belum Lengkap)</option>
-                                <option value="partial">Hitung sementara dari komponen yang ada</option>
-                            </select></div>
-                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Nilai remedial</label>
-                            <select id="setRemedialMode" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
-                                <option value="catat">Hanya dicatat (nilai akhir tidak berubah)</option>
-                                <option value="kktp">Naikkan nilai akhir paling tinggi ke KKTP</option>
-                            </select></div>
-                    </div>
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Ambang Kehadiran (%)</label><input type="number" id="setAttMin" min="0" max="100" step="0.1" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm"></div>
-                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Predikat A mulai</label><input type="number" id="setPredA" min="0" max="100" step="0.1" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm"></div>
-                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Predikat B mulai</label><input type="number" id="setPredB" min="0" max="100" step="0.1" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm"></div>
-                        <div><label class="block text-xs font-bold text-slate-700 mb-1">Predikat C mulai</label><input type="number" id="setPredC" min="0" max="100" step="0.1" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm"></div>
-                    </div>
-                    <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="setAttPenalty"> Kurangi nilai akhir bila kehadiran di bawah ambang (proporsional)</label>
-                    <label class="flex items-center gap-2 text-sm"><input type="checkbox" id="setAttRequired"> Kehadiran minimal menjadi syarat tuntas</label>
-                    <div id="gradingErrors" class="hidden text-xs bg-red-50 text-red-700 border border-red-200 rounded-xl p-3"></div>
-                    <button onclick="saveGradingSettings()" class="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow hover:bg-blue-700 transition">Simpan Pengaturan Penilaian</button>
-                </div>
-
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4 max-w-3xl mt-6" id="aiSettingsCard">
-                    <h4 class="font-bold text-slate-800 border-b pb-2">AI (Google Gemini)</h4>
-                    <label class="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" id="setAiEnabled"> Aktifkan fitur AI</label>
-                    <div id="aiManagedNote" class="hidden text-xs bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-xl p-3">Koneksi AI sudah diatur oleh admin sekolah. Anda tidak perlu mengisi URL atau token. Cukup aktifkan AI, setujui privasi, lalu Simpan.</div>
-                    <label id="aiCustomRow" class="hidden flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" id="setAiCustom" onchange="AIUI.applyConnVisibility()"> Pakai proxy/token atau API key sendiri (lanjutan)</label>
-                    <div id="aiConnGroup" class="space-y-4">
-                        <div>
-                            <label class="block text-xs font-bold text-slate-700 mb-1">Cara terhubung</label>
-                            <select id="setAiMode" onchange="AIUI.onModeChange()" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
-                                <option value="proxy">Lewat proxy Google Apps Script (disarankan, API key aman di server)</option>
-                                <option value="direct">Langsung dengan API key (key tersimpan di browser ini)</option>
-                            </select>
+                        <div class="space-y-2 pt-3 border-t border-slate-100">
+                            <h5 class="text-xs font-medium text-slate-500">Anggota Terdaftar</h5>
+                            <div id="adminMemberList" class="space-y-2"></div>
                         </div>
-                        <div id="aiProxyRow">
-                            <label class="block text-xs font-bold text-slate-700 mb-1">URL Web App Apps Script (berakhiran /exec)</label>
-                            <input type="url" id="setAiProxyUrl" placeholder="https://script.google.com/macros/s/.../exec" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
-                        </div>
-                        <div>
-                            <label id="aiSecretLabel" class="block text-xs font-bold text-slate-700 mb-1"></label>
-                            <input type="password" id="setAiSecret" autocomplete="off" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
-                            <div id="aiDirectWarn" class="hidden text-[11px] text-amber-700 mt-1">Key di browser dapat terbaca siapa pun yang memakai perangkat ini. Pakai key khusus aplikasi ini dan batasi kuotanya di Google AI Studio.</div>
-                        </div>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1">Model</label>
-                        <select id="setAiModelSelect" onchange="AIUI.onModelChange('setAiModelSelect', 'setAiModel')" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm"></select>
-                        <input type="text" id="setAiModel" placeholder="ketik nama model, mis. gemini-3.6-flash" class="hidden mt-2 w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
-                        <div class="flex items-center gap-2 mt-1">
-                            <button id="aiLoadModelsBtn" type="button" onclick="AIUI.loadModels()" class="text-[11px] font-bold text-blue-600 underline">Muat daftar model dari Gemini</button>
-                            <span id="aiModelNote" class="text-[11px] text-slate-500"></span>
-                        </div>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-slate-700 mb-1">Model cadangan (opsional)</label>
-                        <select id="setAiFallbackSelect" onchange="AIUI.onModelChange('setAiFallbackSelect', 'setAiFallback')" class="w-full border border-slate-200 px-3 py-2 rounded-xl text-sm"></select>
-                        <input type="text" id="setAiFallback" placeholder="ketik nama model cadangan" class="hidden mt-2 w-full border border-slate-200 px-3 py-2 rounded-xl text-sm">
-                        <div class="text-[11px] text-slate-500 mt-1">Dipakai otomatis satu kali bila model utama menjawab error 5xx (misal 503 karena model sedang padat).</div>
-                    </div>
-                    <label class="flex items-start gap-2 text-sm"><input type="checkbox" id="setAiPrivacy" class="mt-1"> <span>Saya mengerti bahwa data yang diminta AI diproses oleh layanan Google Gemini. Nama dan NIS siswa diganti kode sebelum dikirim.</span></label>
-                    <label class="flex items-start gap-2 text-sm text-slate-500"><input type="checkbox" id="setAiAllowNames" class="mt-1"> <span>Izinkan nama siswa ikut terkirim (tidak disarankan).</span></label>
-                    <label class="flex items-start gap-2 text-sm"><input type="checkbox" id="setAiTerse" class="mt-1"> <span>Gaya ringkas (hemat token) untuk <b>tafsiran analisis ulangan</b> dan <b>rekomendasi tindak lanjut</b>. Modul ajar, soal, rapor, dan surat tetap memakai bahasa penuh.</span></label>
-                    <div id="aiStatusMsg" class="hidden"></div>
-                    <div id="aiUsageInfo" class="text-[11px] text-slate-500"></div>
-                    <div class="flex flex-wrap gap-2">
-                        <button onclick="AIUI.save()" class="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow hover:bg-blue-700 transition">Simpan Pengaturan AI</button>
-                        <button id="aiTestBtn" onclick="AIUI.test()" class="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow hover:bg-emerald-700 transition">Uji Koneksi</button>
-                        <button id="aiClearBtn" onclick="AIUI.clearSecret()" class="bg-red-50 text-red-600 border border-red-200 px-5 py-2.5 rounded-xl font-bold text-sm">Hapus Kunci</button>
-                    </div>
-                </div>
-
-                <!-- MANAJEMEN TIM & UNDANGAN GURU (Hanya tampil pada Mode Cloud untuk Admin Sekolah) -->
-                <div id="adminTeamCard" data-admin-only class="hidden bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4 max-w-3xl mt-6">
-                    <div class="border-b pb-2 flex items-center justify-between gap-2 flex-wrap">
-                        <div>
-                            <h4 class="font-bold text-slate-800">👥 Anggota Sekolah</h4>
-                            <p class="text-xs text-slate-500">Guru mendaftar sendiri di halaman login. Di sini Anda bisa menentukan peran email tertentu lebih dulu, mereset kata sandi, atau mengeluarkan anggota.</p>
-                        </div>
-                        <button type="button" onclick="Auth.loadAdminTeam()" class="text-xs font-bold text-blue-600 hover:text-blue-800 px-3 py-1.5 rounded-lg bg-blue-50">Muat Ulang</button>
-                    </div>
-
-                    <form id="formInviteTeacher" onsubmit="Auth.inviteTeacher(event)" class="flex flex-col sm:flex-row gap-2">
-                        <input type="email" id="inviteEmail" placeholder="Email guru (contoh: budi@gmail.com)" class="flex-1 border border-slate-200 px-3.5 py-2 rounded-xl text-sm" required>
-                        <select id="inviteRole" class="border border-slate-200 px-3 py-2 rounded-xl text-sm font-semibold">
-                            <option value="teacher">Guru Mapel</option>
-                            <option value="admin">Admin Sekolah</option>
-                        </select>
-                        <button type="submit" id="btnInviteTeacher" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold shadow transition">+ Tetapkan Peran</button>
-                    </form>
-
-                    <div id="adminTeamMsg" class="hidden"></div>
-
-                    <div class="space-y-2">
-                        <h5 class="text-xs font-bold uppercase tracking-wider text-slate-500">Peran Menunggu Pendaftaran</h5>
-                        <div id="adminInviteList" class="space-y-2"></div>
-                    </div>
-
-                    <div class="space-y-2 pt-2 border-t border-slate-100">
-                        <h5 class="text-xs font-bold uppercase tracking-wider text-slate-500">Anggota Aktif Sekolah</h5>
-                        <div id="adminMemberList" class="space-y-2"></div>
                     </div>
                 </div>
             </div>
         </main>
     </div>
 
-    <!-- MODAL PROFIL SAYA (TAMPILAN BIODATA & EDIT PROFIL + KATA SANDI) -->
-    <div id="modalProfile" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[75] hidden flex items-center justify-center p-3 sm:p-4 no-print">
-        <div class="bg-white rounded-3xl w-full max-w-2xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[92vh]">
-            <!-- Header Kartu Profil -->
-            <div class="profile-hero px-6 py-5 text-white flex items-center justify-between gap-4 flex-shrink-0">
-                <div class="flex items-center gap-4 min-w-0">
-                    <div id="profileModalInitials" class="w-16 h-16 rounded-full bg-white/20 backdrop-blur border-2 border-white/70 flex items-center justify-center text-xl font-extrabold shadow-lg flex-shrink-0" style="border-radius:50%">GM</div>
+    <!-- MODAL PROFIL SAYA (TAMPILAN BIODATA & EDIT PROFIL + BUAT/UBAH KATA SANDI) -->
+    <div id="modalProfile" class="fixed inset-0 z-[75] hidden flex items-center justify-center p-3 sm:p-4 no-print">
+        <div class="bg-white w-full max-w-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <!-- Header Profil Bersih (Tanpa Hero Gradien Klise) -->
+            <div class="px-6 py-4 border-b border-slate-200 flex items-center justify-between gap-4 flex-shrink-0 bg-white">
+                <div class="flex items-center gap-3.5 min-w-0">
+                    <div id="profileModalInitials" class="user-avatar-circle w-12 h-12 flex items-center justify-center text-base flex-shrink-0">GM</div>
                     <div class="min-w-0">
-                        <h3 id="profileModalName" class="text-lg sm:text-xl font-bold leading-tight truncate">Guru Mapel</h3>
-                        <p id="profileModalEmail" class="text-xs text-blue-100 truncate mt-0.5">-</p>
-                        <span id="profileModalRole" class="inline-block mt-1.5 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-white/20 text-white border border-white/30">Guru Mata Pelajaran</span>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <h3 id="profileModalName" class="text-base font-semibold text-slate-900 leading-tight truncate">Guru Mapel</h3>
+                            <span id="profileModalRole" class="text-[11px] font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">Guru Mata Pelajaran</span>
+                        </div>
+                        <p id="profileModalEmail" class="text-xs text-slate-500 truncate mt-0.5">-</p>
                     </div>
                 </div>
-                <button type="button" onclick="Auth.closeProfileModal()" class="w-9 h-9 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center text-lg font-bold transition flex-shrink-0" aria-label="Tutup">✕</button>
+                <button type="button" onclick="Auth.closeProfileModal()" class="w-8 h-8 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition flex-shrink-0" aria-label="Tutup">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
             </div>
 
-            <!-- PANEL 1: TAMPILAN BIODATA (Muncul pertama kali) -->
-            <div id="profileViewPanel" class="p-5 sm:p-6 overflow-y-auto space-y-5">
+            <!-- PANEL 1: TAMPILAN BIODATA (Muncul pertama kali saat klik Profil Saya) -->
+            <div id="profileViewPanel" class="p-6 overflow-y-auto space-y-6">
                 <div>
-                    <h4 class="text-xs font-bold uppercase tracking-wider text-blue-600 mb-3">Biodata Pendidik</h4>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50/80 p-4 rounded-2xl border border-slate-200/70 text-sm">
-                        <div>
-                            <span class="block text-[11px] font-semibold text-slate-400">Nama Lengkap</span>
-                            <span id="pvTeacher" class="font-bold text-slate-800">-</span>
-                        </div>
-                        <div>
-                            <span class="block text-[11px] font-semibold text-slate-400">NIP / NUPTK</span>
-                            <span id="pvNip" class="font-semibold text-slate-700">-</span>
-                        </div>
-                        <div>
-                            <span class="block text-[11px] font-semibold text-slate-400">Pangkat / Jabatan</span>
-                            <span id="pvPangkat" class="font-semibold text-slate-700">-</span>
-                        </div>
-                        <div>
-                            <span class="block text-[11px] font-semibold text-slate-400">No. Telepon / WhatsApp</span>
-                            <span id="pvPhone" class="font-semibold text-slate-700">-</span>
-                        </div>
-                        <div class="sm:col-span-2">
-                            <span class="block text-[11px] font-semibold text-slate-400">Email</span>
-                            <span id="pvEmail" class="font-semibold text-slate-700 break-all">-</span>
-                        </div>
-                    </div>
+                    <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Identitas Pendidik</h4>
+                    <dl class="border-t border-slate-100">
+                        <div class="dl-row"><dt class="dl-term">Nama Lengkap</dt><dd id="pvTeacher" class="dl-desc">-</dd></div>
+                        <div class="dl-row"><dt class="dl-term">NIP / NUPTK</dt><dd id="pvNip" class="dl-desc tabular-nums">-</dd></div>
+                        <div class="dl-row"><dt class="dl-term">Pangkat / Jabatan</dt><dd id="pvPangkat" class="dl-desc">-</dd></div>
+                        <div class="dl-row"><dt class="dl-term">No. Telepon / WhatsApp</dt><dd id="pvPhone" class="dl-desc tabular-nums">-</dd></div>
+                        <div class="dl-row"><dt class="dl-term">Alamat Email</dt><dd id="pvEmail" class="dl-desc break-all">-</dd></div>
+                    </dl>
                 </div>
 
                 <div>
-                    <h4 class="text-xs font-bold uppercase tracking-wider text-indigo-600 mb-3">Penugasan &amp; Satuan Pendidikan</h4>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50/80 p-4 rounded-2xl border border-slate-200/70 text-sm">
-                        <div>
-                            <span class="block text-[11px] font-semibold text-slate-400">Mata Pelajaran Diampu</span>
-                            <span id="pvSubject" class="font-bold text-slate-800">-</span>
-                        </div>
-                        <div>
-                            <span class="block text-[11px] font-semibold text-slate-400">Fase Kurikulum</span>
-                            <span id="pvFase" class="font-semibold text-slate-700">-</span>
-                        </div>
-                        <div>
-                            <span class="block text-[11px] font-semibold text-slate-400">Satuan Pendidikan</span>
-                            <span id="pvSchool" class="font-semibold text-slate-700">-</span>
-                        </div>
-                        <div>
-                            <span class="block text-[11px] font-semibold text-slate-400">Tahun Pelajaran &amp; Semester</span>
-                            <span id="pvPeriod" class="font-semibold text-slate-700">-</span>
-                        </div>
-                        <div>
-                            <span class="block text-[11px] font-semibold text-slate-400">Kepala Sekolah</span>
-                            <span id="pvPrincipal" class="font-semibold text-slate-700">-</span>
-                        </div>
-                        <div>
-                            <span class="block text-[11px] font-semibold text-slate-400">NIP Kepala Sekolah</span>
-                            <span id="pvNipPrincipal" class="font-semibold text-slate-700">-</span>
-                        </div>
-                    </div>
+                    <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Penugasan &amp; Satuan Pendidikan</h4>
+                    <dl class="border-t border-slate-100">
+                        <div class="dl-row"><dt class="dl-term">Mata Pelajaran</dt><dd id="pvSubject" class="dl-desc">-</dd></div>
+                        <div class="dl-row"><dt class="dl-term">Fase Kurikulum</dt><dd id="pvFase" class="dl-desc">-</dd></div>
+                        <div class="dl-row"><dt class="dl-term">Satuan Pendidikan</dt><dd id="pvSchool" class="dl-desc">-</dd></div>
+                        <div class="dl-row"><dt class="dl-term">Periode Aktif</dt><dd id="pvPeriod" class="dl-desc">-</dd></div>
+                        <div class="dl-row"><dt class="dl-term">Kepala Sekolah</dt><dd id="pvPrincipal" class="dl-desc">-</dd></div>
+                        <div class="dl-row"><dt class="dl-term">NIP Kepala Sekolah</dt><dd id="pvNipPrincipal" class="dl-desc tabular-nums">-</dd></div>
+                    </dl>
                 </div>
 
-                <div class="flex flex-col-reverse sm:flex-row justify-end gap-2.5 pt-2 border-t border-slate-100">
-                    <button type="button" onclick="Auth.closeProfileModal()" class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-sm font-bold transition">Tutup</button>
-                    <button type="button" onclick="Auth.switchProfileMode('edit')" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold shadow transition flex items-center justify-center gap-2">✏️ Edit Profil</button>
+                <div class="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-3 border-t border-slate-200">
+                    <button type="button" onclick="Auth.closeProfileModal()" class="btn btn-secondary">Tutup</button>
+                    <button type="button" onclick="Auth.switchProfileMode('edit')" class="btn btn-primary">Edit Profil</button>
                 </div>
             </div>
 
-            <!-- PANEL 2: EDIT BIODATA & UBAH KATA SANDI -->
-            <div id="profileEditPanel" class="hidden p-5 sm:p-6 overflow-y-auto space-y-6">
-                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+            <!-- PANEL 2: EDIT BIODATA & KATA SANDI -->
+            <div id="profileEditPanel" class="hidden p-6 overflow-y-auto space-y-6">
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100">
                     <div>
-                        <h4 class="font-bold text-slate-800 text-base">Edit Biodata &amp; Keamanan Akun</h4>
-                        <p class="text-xs text-slate-500">Perbarui informasi diri, mata pelajaran, serta kata sandi akun Anda.</p>
+                        <h4 class="font-semibold text-slate-900 text-sm">Edit Biodata &amp; Keamanan Akun</h4>
+                        <p class="text-xs text-slate-500">Perbarui data diri, penugasan mengajar, serta kata sandi akun Anda.</p>
                     </div>
-                    <button type="button" onclick="Auth.switchProfileMode('view')" class="text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-xl transition">← Lihat Biodata</button>
+                    <button type="button" onclick="Auth.switchProfileMode('view')" class="btn btn-secondary py-1.5 px-3 text-xs">Kembali ke Biodata</button>
                 </div>
 
                 <form onsubmit="Auth.saveProfileBiodata(event)" class="space-y-4">
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                         <div>
-                            <label for="peTeacher" class="block text-xs font-bold text-slate-700 mb-1">Nama Lengkap &amp; Gelar *</label>
-                            <input type="text" id="peTeacher" required maxlength="80" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm" placeholder="Contoh: Budi Santoso, S.Pd.">
+                            <label for="peTeacher" class="block text-xs mb-1">Nama Lengkap &amp; Gelar *</label>
+                            <input type="text" id="peTeacher" required maxlength="80" class="w-full border px-3 py-2 rounded-md text-sm" placeholder="Contoh: Budi Santoso, S.Pd.">
                         </div>
                         <div>
-                            <label for="peNip" class="block text-xs font-bold text-slate-700 mb-1">NIP / NUPTK</label>
-                            <input type="text" id="peNip" maxlength="40" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm" placeholder="Contoh: 198501012010011001">
+                            <label for="peNip" class="block text-xs mb-1">NIP / NUPTK</label>
+                            <input type="text" id="peNip" maxlength="40" class="w-full border px-3 py-2 rounded-md text-sm" placeholder="198501012010011001">
                         </div>
                         <div>
-                            <label for="pePangkat" class="block text-xs font-bold text-slate-700 mb-1">Pangkat / Golongan / Jabatan</label>
-                            <input type="text" id="pePangkat" maxlength="80" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm" placeholder="Contoh: Penata Muda / III-a">
+                            <label for="pePangkat" class="block text-xs mb-1">Pangkat / Golongan / Jabatan</label>
+                            <input type="text" id="pePangkat" maxlength="80" class="w-full border px-3 py-2 rounded-md text-sm" placeholder="Penata Muda / III-a">
                         </div>
                         <div>
-                            <label for="pePhone" class="block text-xs font-bold text-slate-700 mb-1">No. Telepon / WhatsApp</label>
-                            <input type="text" id="pePhone" maxlength="30" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm" placeholder="Contoh: 081234567890">
+                            <label for="pePhone" class="block text-xs mb-1">No. Telepon / WhatsApp</label>
+                            <input type="text" id="pePhone" maxlength="30" class="w-full border px-3 py-2 rounded-md text-sm" placeholder="081234567890">
                         </div>
                         <div class="sm:col-span-2">
-                            <label for="peEmail" class="block text-xs font-bold text-slate-700 mb-1">Alamat Email</label>
-                            <input type="email" id="peEmail" maxlength="120" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm" placeholder="nama@email.com">
+                            <label for="peEmail" class="block text-xs mb-1">Alamat Email</label>
+                            <input type="email" id="peEmail" maxlength="120" class="w-full border px-3 py-2 rounded-md text-sm" placeholder="nama@email.com">
                         </div>
                         <div>
-                            <label for="peSubject" class="block text-xs font-bold text-slate-700 mb-1">Mata Pelajaran Diampu</label>
-                            <select id="peSubject" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm">
+                            <label for="peSubject" class="block text-xs mb-1">Mata Pelajaran Diampu</label>
+                            <select id="peSubject" class="w-full border px-3 py-2 rounded-md text-sm">
                                 <option value="Pendidikan Agama dan Budi Pekerti">Pendidikan Agama dan Budi Pekerti</option>
                                 <option value="Pendidikan Pancasila">Pendidikan Pancasila</option>
                                 <option value="Bahasa Indonesia">Bahasa Indonesia</option>
@@ -2086,8 +2118,8 @@
                             </select>
                         </div>
                         <div>
-                            <label for="peFase" class="block text-xs font-bold text-slate-700 mb-1">Fase Kurikulum</label>
-                            <select id="peFase" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm">
+                            <label for="peFase" class="block text-xs mb-1">Fase Kurikulum</label>
+                            <select id="peFase" class="w-full border px-3 py-2 rounded-md text-sm">
                                 <option value="A">Fase A (SD Kelas 1–2)</option>
                                 <option value="B">Fase B (SD Kelas 3–4)</option>
                                 <option value="C">Fase C (SD Kelas 5–6)</option>
@@ -2100,73 +2132,73 @@
 
                     <div class="pt-3 border-t border-slate-100 space-y-3">
                         <div class="flex items-center justify-between flex-wrap gap-2">
-                            <h5 class="text-xs font-bold uppercase tracking-wider text-slate-500">Data Satuan Pendidikan</h5>
-                            <span id="peSchoolLockNote" class="hidden text-[11px] text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full font-semibold">🔒 Dikelola Admin Sekolah</span>
+                            <h5 class="text-xs font-semibold text-slate-600">Data Satuan Pendidikan</h5>
+                            <span id="peSchoolLockNote" class="hidden text-[11px] text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded font-medium">Dikelola Admin Sekolah</span>
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                             <div class="sm:col-span-2">
-                                <label for="peSchool" class="block text-xs font-bold text-slate-700 mb-1">Nama Sekolah</label>
-                                <input type="text" id="peSchool" maxlength="120" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm">
+                                <label for="peSchool" class="block text-xs mb-1">Nama Satuan Pendidikan</label>
+                                <input type="text" id="peSchool" maxlength="120" class="w-full border px-3 py-2 rounded-md text-sm">
                             </div>
                             <div>
-                                <label for="peAcademicYear" class="block text-xs font-bold text-slate-700 mb-1">Tahun Pelajaran</label>
-                                <input type="text" id="peAcademicYear" placeholder="2026/2027" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm">
+                                <label for="peAcademicYear" class="block text-xs mb-1">Tahun Pelajaran</label>
+                                <input type="text" id="peAcademicYear" placeholder="2026/2027" class="w-full border px-3 py-2 rounded-md text-sm">
                             </div>
                             <div>
-                                <label for="peSemester" class="block text-xs font-bold text-slate-700 mb-1">Semester</label>
-                                <select id="peSemester" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm">
+                                <label for="peSemester" class="block text-xs mb-1">Semester</label>
+                                <select id="peSemester" class="w-full border px-3 py-2 rounded-md text-sm">
                                     <option value="GANJIL">Ganjil</option>
                                     <option value="GENAP">Genap</option>
                                 </select>
                             </div>
                             <div>
-                                <label for="pePrincipal" class="block text-xs font-bold text-slate-700 mb-1">Nama Kepala Sekolah</label>
-                                <input type="text" id="pePrincipal" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm">
+                                <label for="pePrincipal" class="block text-xs mb-1">Nama Kepala Sekolah</label>
+                                <input type="text" id="pePrincipal" class="w-full border px-3 py-2 rounded-md text-sm">
                             </div>
                             <div>
-                                <label for="peNipPrincipal" class="block text-xs font-bold text-slate-700 mb-1">NIP Kepala Sekolah</label>
-                                <input type="text" id="peNipPrincipal" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm">
+                                <label for="peNipPrincipal" class="block text-xs mb-1">NIP Kepala Sekolah</label>
+                                <input type="text" id="peNipPrincipal" class="w-full border px-3 py-2 rounded-md text-sm">
                             </div>
                         </div>
                     </div>
 
                     <div id="peMsg" class="hidden"></div>
                     <div class="flex justify-end gap-2 pt-1">
-                        <button type="button" onclick="Auth.switchProfileMode('view')" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition">Batal</button>
-                        <button type="submit" id="btnSaveProfileBiodata" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow transition">💾 Simpan Biodata</button>
+                        <button type="button" onclick="Auth.switchProfileMode('view')" class="btn btn-secondary">Batal</button>
+                        <button type="submit" id="btnSaveProfileBiodata" class="btn btn-primary">Simpan Biodata</button>
                     </div>
                 </form>
 
-                <!-- SEKSI UBAH KATA SANDI (Hanya saat login akun aktif) -->
+                <!-- SEKSI BUAT / UBAH KATA SANDI (Otomatis menyesuaikan akun Google vs Sandi) -->
                 <div id="profilePasswordSection" class="hidden pt-5 border-t border-slate-200 space-y-3">
                     <div>
-                        <h5 class="font-bold text-slate-800 text-sm flex items-center gap-2">🔑 Ubah Kata Sandi Akun</h5>
-                        <p class="text-[11px] text-slate-500 mt-0.5">Kosongkan bagian ini bila Anda tidak ingin mengganti kata sandi.</p>
+                        <h5 id="cpSectionTitle" class="font-semibold text-slate-900 text-sm">Ubah Kata Sandi</h5>
+                        <p id="cpSectionDesc" class="text-xs text-slate-500 mt-0.5">Masukkan kata sandi saat ini sebelum menentukan kata sandi baru.</p>
                     </div>
-                    <form onsubmit="Auth.changePassword(event)" class="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div>
-                                <label for="cpOld" class="block text-[11px] font-bold text-slate-600 mb-1">Kata Sandi Lama</label>
+                    <form onsubmit="Auth.changePassword(event)" class="space-y-3 bg-slate-50 p-4 rounded-lg border border-slate-200">
+                        <div id="cpFieldsGrid" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div id="cpOldWrap">
+                                <label for="cpOld" class="block text-xs mb-1">Kata Sandi Saat Ini</label>
                                 <div class="relative">
-                                    <input type="password" id="cpOld" autocomplete="current-password" placeholder="Sandi saat ini" class="w-full bg-white border border-slate-200 pl-3 pr-16 py-2 rounded-xl text-sm" required>
-                                    <button type="button" onclick="Auth.togglePassword('cpOld', this)" class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-blue-600">Tampilkan</button>
+                                    <input type="password" id="cpOld" autocomplete="current-password" placeholder="Sandi saat ini" class="w-full bg-white border pl-3 pr-16 py-2 rounded-md text-sm" required>
+                                    <button type="button" onclick="Auth.togglePassword('cpOld', this)" class="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-medium text-slate-500 hover:text-slate-800">Tampilkan</button>
                                 </div>
                             </div>
                             <div>
-                                <label for="cpNew" class="block text-[11px] font-bold text-slate-600 mb-1">Kata Sandi Baru (min. 8)</label>
+                                <label for="cpNew" class="block text-xs mb-1">Kata Sandi Baru (min. 8)</label>
                                 <div class="relative">
-                                    <input type="password" id="cpNew" autocomplete="new-password" placeholder="Minimal 8 karakter" minlength="8" class="w-full bg-white border border-slate-200 pl-3 pr-16 py-2 rounded-xl text-sm" required>
-                                    <button type="button" onclick="Auth.togglePassword('cpNew', this)" class="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-blue-600">Tampilkan</button>
+                                    <input type="password" id="cpNew" autocomplete="new-password" placeholder="Min. 8 karakter" minlength="8" class="w-full bg-white border pl-3 pr-16 py-2 rounded-md text-sm" required>
+                                    <button type="button" onclick="Auth.togglePassword('cpNew', this)" class="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-medium text-slate-500 hover:text-slate-800">Tampilkan</button>
                                 </div>
                             </div>
                             <div>
-                                <label for="cpNew2" class="block text-[11px] font-bold text-slate-600 mb-1">Ulangi Kata Sandi Baru</label>
-                                <input type="password" id="cpNew2" autocomplete="new-password" placeholder="Ketik ulang sandi baru" minlength="8" class="w-full bg-white border border-slate-200 px-3 py-2 rounded-xl text-sm" required>
+                                <label for="cpNew2" class="block text-xs mb-1">Konfirmasi Sandi Baru</label>
+                                <input type="password" id="cpNew2" autocomplete="new-password" placeholder="Ulangi sandi baru" minlength="8" class="w-full bg-white border px-3 py-2 rounded-md text-sm" required>
                             </div>
                         </div>
                         <div id="cpMsg" class="hidden"></div>
                         <div class="flex justify-end">
-                            <button type="submit" id="btnSavePassword" class="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold shadow transition">🔑 Perbarui Kata Sandi</button>
+                            <button type="submit" id="btnSavePassword" class="btn btn-secondary">Perbarui Kata Sandi</button>
                         </div>
                     </form>
                 </div>
@@ -2177,7 +2209,7 @@
     <!-- MODAL GENERATE PROYEK PROFIL LULUSAN AI -->
     <div id="modalProyekAI" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
         <form id="formProyekAI" class="bg-white rounded-2xl p-6 w-full max-w-lg space-y-4 shadow-2xl" onsubmit="processGenerateProyekAI(event)">
-            <h4 class="font-bold text-lg border-b pb-2 text-slate-800 flex items-center gap-2">🪄 Generate Proyek Dimensi Profil AI</h4>
+            <h4 class="font-bold text-lg border-b pb-2 text-slate-800 flex items-center gap-2">Generate Proyek Dimensi Profil AI</h4>
             <div>
                 <label class="block text-xs font-bold text-slate-700 mb-1">Tema Proyek (Fase D - SMP) *</label>
                 <select id="aiProyekTema" class="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" required onchange="updateProyekTopics()">
@@ -2216,7 +2248,7 @@
             </div>
             <div class="flex justify-end gap-2 pt-4">
                 <button type="button" onclick="document.getElementById('modalProyekAI').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold hover:bg-slate-200 transition">Batal</button>
-                <button type="submit" id="btnGenProyekAI" class="px-5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow hover:bg-indigo-700 transition flex items-center gap-2">✨ Generate Proyek</button>
+                <button type="submit" id="btnGenProyekAI" class="px-5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow hover:bg-indigo-700 transition flex items-center gap-2">Generate Proyek</button>
             </div>
         </form>
     </div>
@@ -2329,7 +2361,7 @@
         <form id="formAssignment" class="bg-white rounded-2xl p-6 w-full max-w-2xl space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto" onsubmit="saveAssignment(event)">
             <div class="flex justify-between items-center border-b pb-2">
                 <h4 class="font-bold text-lg text-slate-800">Tambah Tugas / LKPD Baru</h4>
-                <button data-ai type="button" onclick="generateAssignmentAI()" id="btnGenAsgAI" class="px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold hover:bg-indigo-200 transition flex items-center gap-1">🪄 Draft via AI</button>
+                <button data-ai type="button" onclick="generateAssignmentAI()" id="btnGenAsgAI" class="px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold hover:bg-indigo-200 transition flex items-center gap-1">Draft via AI</button>
             </div>
             <div class="grid grid-cols-2 gap-4">
                 <div>
@@ -2418,7 +2450,7 @@
             </div>
             <div class="flex justify-end gap-2 pt-2 border-t flex-shrink-0">
                 <button type="button" onclick="document.getElementById('modalSubmissions').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold hover:bg-slate-200 transition">Batal</button>
-                <button type="submit" class="px-5 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow hover:bg-emerald-700 transition flex items-center gap-2">💾 Simpan Penilaian</button>
+                <button type="submit" class="px-5 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow hover:bg-emerald-700 transition flex items-center gap-2">Simpan Penilaian</button>
             </div>
         </form>
     </div>
@@ -2515,8 +2547,8 @@
     <div id="modalDocument" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
         <form id="formDocument" class="bg-white rounded-2xl p-6 w-full max-w-2xl space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto" onsubmit="saveDocument(event)">
             <div class="flex justify-between items-center border-b pb-2">
-                <h4 class="font-bold text-lg text-slate-800 flex items-center gap-2">✉️ Buat Surat Resmi Baru</h4>
-                <button data-ai type="button" onclick="generateDocAI()" class="px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold hover:bg-indigo-200 transition flex items-center gap-1">🪄 Tulis Otomatis via AI</button>
+                <h4 class="font-bold text-lg text-slate-800 flex items-center gap-2">Buat Surat Resmi Baru</h4>
+                <button data-ai type="button" onclick="generateDocAI()" class="px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold hover:bg-indigo-200 transition flex items-center gap-1">Tulis Otomatis via AI</button>
             </div>
             
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -2630,7 +2662,7 @@
             
             <div class="flex justify-end gap-2 pt-4 border-t">
                 <button type="button" onclick="document.getElementById('modalKisiKisiAI').classList.add('hidden')" class="px-4 py-2 bg-slate-100 rounded-xl text-xs font-bold hover:bg-slate-200 transition">Batal</button>
-                <button type="submit" id="btnGenKisiAI" class="px-5 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold shadow hover:bg-purple-700 transition flex items-center gap-2">✨ Susun Kisi-Kisi</button>
+                <button type="submit" id="btnGenKisiAI" class="px-5 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold shadow hover:bg-purple-700 transition flex items-center gap-2">Susun Kisi-Kisi</button>
             </div>
         </form>
     </div>

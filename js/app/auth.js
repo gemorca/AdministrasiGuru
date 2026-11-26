@@ -337,7 +337,8 @@ const Auth = (() => {
             Cloud.user = {
                 id: session.user.id,
                 email: session.user.email || '',
-                name: session.user.name || ''
+                name: session.user.name || '',
+                hasPassword: session.user.hasPassword !== false
             };
             Cloud.school = { id: (session.school && session.school.id) || 'sekolah', name: (session.school && session.school.name) || '' };
             Cloud.role = session.role === 'admin' ? 'admin' : 'teacher';
@@ -591,6 +592,34 @@ const Auth = (() => {
         if (cpMsg) { cpMsg.className = 'hidden'; cpMsg.innerText = ''; }
         const pwSec = $('profilePasswordSection');
         if (pwSec) pwSec.classList.toggle('hidden', !(Cloud.enabled && Cloud.ready));
+        renderPasswordFieldState();
+    }
+
+    function renderPasswordFieldState() {
+        const hasPw = !(Cloud.user && Cloud.user.hasPassword === false);
+        const oldWrap = $('cpOldWrap');
+        const oldInput = $('cpOld');
+        const grid = $('cpFieldsGrid');
+        const title = $('cpSectionTitle');
+        const desc = $('cpSectionDesc');
+        const btn = $('btnSavePassword');
+        if (oldWrap) oldWrap.classList.toggle('hidden', !hasPw);
+        if (oldInput) {
+            oldInput.required = hasPw;
+            if (!hasPw) oldInput.value = '';
+        }
+        if (grid) {
+            grid.className = hasPw
+                ? 'grid grid-cols-1 sm:grid-cols-3 gap-3'
+                : 'grid grid-cols-1 sm:grid-cols-2 gap-3';
+        }
+        if (title) title.innerText = hasPw ? 'Ubah Kata Sandi' : 'Buat Kata Sandi Akun';
+        if (desc) {
+            desc.innerText = hasPw
+                ? 'Masukkan kata sandi saat ini sebelum menentukan kata sandi baru.'
+                : 'Akun Anda terdaftar melalui Google dan belum memiliki kata sandi. Buat kata sandi baru tanpa perlu mengisi kata sandi saat ini.';
+        }
+        if (btn) btn.innerText = hasPw ? 'Perbarui Kata Sandi' : 'Simpan Kata Sandi';
     }
 
     function switchProfileMode(mode) {
@@ -686,16 +715,17 @@ const Auth = (() => {
 
             populateProfileView();
             switchProfileMode('view');
-            showModal('Profil Diperbarui', 'Biodata Anda berhasil disimpan dan disinkronkan.', '✅');
+            showModal('Profil Diperbarui', 'Biodata Anda berhasil disimpan dan disinkronkan.', '');
         } finally {
-            if (btn) { btn.disabled = false; btn.innerText = '💾 Simpan Biodata'; }
+            if (btn) { btn.disabled = false; btn.innerText = 'Simpan Biodata'; }
         }
     }
 
     async function changePassword(e) {
         if (e) e.preventDefault();
         if (!Cloud.enabled || !remote) return;
-        const oldPw = $('cpOld').value || '';
+        const hasPw = !(Cloud.user && Cloud.user.hasPassword === false);
+        const oldPw = hasPw ? ($('cpOld').value || '') : '';
         const newPw = $('cpNew').value || '';
         const newPw2 = $('cpNew2').value || '';
         const msg = $('cpMsg');
@@ -703,20 +733,26 @@ const Auth = (() => {
         const show = (t, err) => {
             if (!msg) return;
             msg.innerText = t;
-            msg.className = 'text-xs rounded-xl p-3 border ' + (err ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200');
+            msg.className = 'text-xs rounded-lg p-3 border ' + (err ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200');
         };
+        if (hasPw && !oldPw) { show('Masukkan kata sandi saat ini.', true); return; }
         if (newPw.length < 8) { show(REASONS.PASSWORD_WEAK, true); return; }
         if (newPw !== newPw2) { show('Konfirmasi kata sandi baru tidak sama.', true); return; }
-        if (btn) { btn.disabled = true; btn.innerText = 'Memperbarui...'; }
+        if (btn) { btn.disabled = true; btn.innerText = 'Memproses...'; }
         try {
             const res = await remote.changePassword(oldPw, newPw);
-            if (!res || !res.ok) { show(res && res.reason === 'BAD_CREDENTIALS' ? 'Kata sandi lama salah.' : (REASONS[res && res.reason] || 'Gagal mengubah kata sandi.'), true); return; }
-            $('cpOld').value = ''; $('cpNew').value = ''; $('cpNew2').value = '';
-            show('Kata sandi berhasil diperbarui.', false);
+            if (!res || !res.ok) { show(res && res.reason === 'BAD_CREDENTIALS' ? 'Kata sandi saat ini salah.' : (REASONS[res && res.reason] || 'Gagal menyimpan kata sandi.'), true); return; }
+            if (Cloud.user) Cloud.user.hasPassword = true;
+            if ($('cpOld')) $('cpOld').value = '';
+            $('cpNew').value = '';
+            $('cpNew2').value = '';
+            renderPasswordFieldState();
+            show(hasPw ? 'Kata sandi berhasil diperbarui.' : 'Kata sandi berhasil dibuat. Untuk perubahan berikutnya, gunakan kata sandi ini sebagai kata sandi saat ini.', false);
         } catch (err) {
-            show(err && err.message ? err.message : 'Gagal mengubah kata sandi.', true);
+            show(err && err.message ? err.message : 'Gagal menyimpan kata sandi.', true);
         } finally {
-            if (btn) { btn.disabled = false; btn.innerText = '🔑 Perbarui Kata Sandi'; }
+            if (btn) btn.disabled = false;
+            renderPasswordFieldState();
         }
     }
 
@@ -781,23 +817,28 @@ const Auth = (() => {
         const el = $('syncStatusBadge');
         if (!el || !Cloud.enabled) return;
         const s = st || Sync.status();
-        let label = '☁️ Tersinkron';
-        let cls = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+        let label = 'Tersinkron';
+        let dot = 'bg-emerald-600';
+        let cls = 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50';
         if (s.state === 'syncing') {
-            label = '🔄 Menyinkronkan...';
-            cls = 'bg-blue-50 text-blue-700 border-blue-200';
+            label = 'Menyinkronkan...';
+            dot = 'bg-blue-600 animate-pulse';
+            cls = 'bg-blue-50/60 text-blue-800 border-blue-200';
         } else if (s.state === 'offline') {
-            label = s.pending ? `📴 Luring (${s.pending} antre)` : '📴 Luring';
+            label = s.pending ? `Luring (${s.pending})` : 'Luring';
+            dot = 'bg-amber-500';
             cls = 'bg-amber-50 text-amber-800 border-amber-200';
         } else if (s.state === 'error') {
-            label = s.pending ? `⚠️ Gagal sinkron (${s.pending})` : '⚠️ Gagal sinkron';
+            label = s.pending ? `Gagal sinkron (${s.pending})` : 'Gagal sinkron';
+            dot = 'bg-red-600';
             cls = 'bg-red-50 text-red-700 border-red-200';
         } else if (s.pending > 0) {
-            label = `⏳ Antre (${s.pending})`;
+            label = `Antre (${s.pending})`;
+            dot = 'bg-amber-500';
             cls = 'bg-amber-50 text-amber-800 border-amber-200';
         }
-        el.innerText = label;
-        el.className = 'text-[11px] font-bold px-2.5 py-1 rounded-xl border cursor-pointer transition ' + cls;
+        el.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${dot}"></span><span>${esc(label)}</span>`;
+        el.className = 'inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-md border cursor-pointer transition ' + cls;
         el.title = s.lastError ? ('Galat terakhir: ' + s.lastError + ' (klik untuk coba lagi)') : 'Klik untuk sinkronkan sekarang';
     }
 
@@ -805,7 +846,7 @@ const Auth = (() => {
         if (!Cloud.enabled || !Cloud.ready) return;
         const st = await Sync.syncNow();
         if (st.lastError) {
-            showModal('Sinkronisasi Bermasalah', 'Belum berhasil menyinkronkan data: ' + st.lastError, '⚠️');
+            showModal('Sinkronisasi Bermasalah', 'Belum berhasil menyinkronkan data: ' + st.lastError, '');
         }
     }
 
@@ -816,19 +857,30 @@ const Auth = (() => {
         return s ? s.accessToken : '';
     }
 
-    /** Keluar akun: menunggu antrean kosong lebih dulu; memperingatkan bila masih ada pending. */
-    async function logout() {
+    /** Keluar akun: selalu meminta konfirmasi pengguna terlebih dahulu, lalu menguras antrean sinkronisasi. */
+    function logout() {
+        if (!Cloud.enabled) return;
+        closeUserMenu();
+        showConfirm(
+            'Apakah Anda yakin ingin keluar dari sesi akun ini?',
+            () => { performLogout(); },
+            { title: 'Keluar dari Akun', confirmText: 'Ya, Keluar', cancelText: 'Batal' }
+        );
+    }
+
+    async function performLogout() {
         if (!Cloud.enabled) return;
         const st = Sync.status();
         if (st.pending > 0) {
             const el = $('syncStatusBadge');
-            if (el) el.innerText = '⏳ Menyelesaikan antrean...';
+            if (el) el.innerText = 'Menyelesaikan antrean...';
             const res = await Sync.waitUntilDrained(10000);
             if (!res.drained) {
                 showConfirm(
                     `Masih ada ${res.pending} perubahan lokal yang belum terkirim ke server karena kendala koneksi. ` +
                     `Jika Anda keluar dan perangkat dipakai akun lain, perubahan tersebut dapat hilang. Tetap keluar sekarang?`,
-                    () => { forceLogout(); }
+                    () => { forceLogout(); },
+                    { title: 'Perubahan Belum Tersinkron', confirmText: 'Tetap Keluar', cancelText: 'Batal' }
                 );
                 renderSyncBadge(Sync.status());
                 return;

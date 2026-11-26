@@ -52,7 +52,12 @@ const RemoteSheets = (() => {
         function toSession(me) {
             return {
                 accessToken: token,
-                user: { id: me.user_id, email: me.email, name: me.name },
+                user: {
+                    id: me.user_id,
+                    email: me.email,
+                    name: me.name,
+                    hasPassword: me.has_password !== false
+                },
                 role: me.role === 'admin' ? 'admin' : 'teacher',
                 school: { id: me.school_id || 'sekolah', name: me.school_name || '' }
             };

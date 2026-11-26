@@ -109,7 +109,15 @@ function findUserById_(id) {
   return null;
 }
 function meOf_(u) {
-  return { user_id: u.id, email: u.email, name: u.name, role: u.role === 'admin' ? 'admin' : 'teacher', school_id: 'sekolah', school_name: cfgGet_('school_name') };
+  return {
+    user_id: u.id,
+    email: u.email,
+    name: u.name,
+    role: u.role === 'admin' ? 'admin' : 'teacher',
+    has_password: !!(u.salt && u.hash),
+    school_id: 'sekolah',
+    school_name: cfgGet_('school_name')
+  };
 }
 
 // ---------- sesi ----------
@@ -234,10 +242,10 @@ function actGoogle_(req) {
       if (regCode && !inv && !safeEquals_(String(req.code || ''), regCode)) return { ok: false, reason: 'BAD_CODE', email: g.email, name: g.name };
       if (inv) { role = inv.role; markInviteClaimed_(inv); }
     }
-    var salt = newSalt_(), id = 'U-' + Utilities.getUuid().slice(0, 12);
-    // Kata sandi acak tak diketahui siapa pun: akun ini masuk lewat Google (Admin bisa reset bila perlu sandi).
-    sheet_(SH_.USERS, USER_HEAD_).appendRow([id, g.email, name, role, salt, hashPw_(randToken_(), salt), 'active', new Date().toISOString(), '']);
-    return Object.assign({ ok: true, token: createSession_(id) }, meOf_({ id: id, email: g.email, name: name, role: role }));
+    var id = 'U-' + Utilities.getUuid().slice(0, 12);
+    // Salt & hash dikosongkan menandakan akun Google belum pernah mengatur kata sandi manual.
+    sheet_(SH_.USERS, USER_HEAD_).appendRow([id, g.email, name, role, '', '', 'active', new Date().toISOString(), '']);
+    return Object.assign({ ok: true, token: createSession_(id) }, meOf_({ id: id, email: g.email, name: name, role: role, salt: '', hash: '' }));
   });
 }
 
@@ -263,7 +271,7 @@ function actRegister_(req) {
     }
     var salt = newSalt_(), id = 'U-' + Utilities.getUuid().slice(0, 12);
     sheet_(SH_.USERS, USER_HEAD_).appendRow([id, email, name, role, salt, hashPw_(pw, salt), 'active', new Date().toISOString(), '']);
-    var u = { id: id, email: email, name: name, role: role };
+    var u = { id: id, email: email, name: name, role: role, salt: salt, hash: '1' };
     return Object.assign({ ok: true, token: createSession_(id) }, meOf_(u));
   });
 }
@@ -274,8 +282,8 @@ function actLogin_(req) {
   var fails = parseInt(cache.get(fk) || '0', 10);
   if (fails >= 6) return { ok: false, reason: 'LOCKED' };
   var u = findUserByEmail_(email);
-  // Hash tetap dihitung walau akun tidak ada agar waktu respons seragam.
-  var okPw = u ? (hashPw_(pw, u.salt) === u.hash) : (hashPw_(pw, 'x'), false);
+  // Hash tetap dihitung walau akun tidak ada atau belum punya sandi agar waktu respons seragam.
+  var okPw = (u && u.salt && u.hash) ? (hashPw_(pw, u.salt) === u.hash) : (hashPw_(pw, 'x'), false);
   if (!u || !okPw) { cache.put(fk, String(fails + 1), 900); return { ok: false, reason: 'BAD_CREDENTIALS' }; }
   cache.remove(fk);
   return withLock_(function () {
@@ -287,11 +295,15 @@ function actLogin_(req) {
 function actChangePassword_(user, req) {
   var oldPw = String(req.oldPassword || ''), newPw = String(req.newPassword || '');
   if (newPw.length < 8 || newPw.length > 100) return { ok: false, reason: 'PASSWORD_WEAK' };
-  if (hashPw_(oldPw, user.salt) !== user.hash) return { ok: false, reason: 'BAD_CREDENTIALS' };
+  var hasExistingPw = !!(user.salt && user.hash);
+  if (hasExistingPw && hashPw_(oldPw, user.salt) !== user.hash) return { ok: false, reason: 'BAD_CREDENTIALS' };
   return withLock_(function () {
+    var fresh = findUserById_(user.id);
+    if (!fresh) return { ok: false, error: 'AUTH' };
+    if (fresh.salt && fresh.hash && hashPw_(oldPw, fresh.salt) !== fresh.hash) return { ok: false, reason: 'BAD_CREDENTIALS' };
     var salt = newSalt_();
-    sheet_(SH_.USERS, USER_HEAD_).getRange(user.row, 5, 1, 2).setValues([[salt, hashPw_(newPw, salt)]]);
-    return { ok: true };
+    sheet_(SH_.USERS, USER_HEAD_).getRange(fresh.row, 5, 1, 2).setValues([[salt, hashPw_(newPw, salt)]]);
+    return { ok: true, has_password: true };
   });
 }
 
@@ -304,7 +316,7 @@ function actUpdateProfile_(user, req) {
       var school = str_(req.school, 120);
       if (school) cfgSet_('school_name', school);
     }
-    var updated = { id: user.id, email: user.email, name: name, role: user.role };
+    var updated = { id: user.id, email: user.email, name: name, role: user.role, salt: user.salt, hash: user.hash };
     return Object.assign({ ok: true }, meOf_(updated));
   });
 }

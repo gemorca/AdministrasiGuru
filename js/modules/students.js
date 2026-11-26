@@ -22,9 +22,9 @@
                     <td class="px-4 py-3"><span class="px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-700">${esc(s.gender)}</span></td>
                     <td class="px-4 py-3 font-medium text-slate-600">${esc(s.class)}</td>
                     <td class="px-4 py-3 text-center no-print">
-                        <div data-admin-only class="flex justify-center gap-1 ${hideAct}">
-                            <button onclick="openModalStudent('${s.id}')" class="text-blue-600 hover:text-blue-800 font-bold text-xs bg-blue-50 px-2.5 py-1 rounded-lg transition-colors" title="Edit Data">✏️</button>
-                            <button onclick="deleteStudent('${s.id}')" class="text-red-600 hover:text-red-800 font-bold text-xs bg-red-50 px-2.5 py-1 rounded-lg transition-colors" title="Hapus Data">🗑️</button>
+                        <div data-admin-only class="flex justify-center gap-1.5 ${hideAct}">
+                            <button onclick="openModalStudent('${s.id}')" class="btn btn-secondary py-1 px-2.5 text-xs">Edit</button>
+                            <button onclick="deleteStudent('${s.id}')" class="btn btn-danger-outline py-1 px-2.5 text-xs">Hapus</button>
                         </div>
                     </td>
                 </tr>
