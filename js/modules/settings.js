@@ -22,6 +22,7 @@
             if(sNipPri) sNipPri.value = settings.nipPrincipal || '';
             renderGradingSettings();
             if (typeof AIUI !== 'undefined') AIUI.render();
+            if (typeof Auth !== 'undefined') Auth.renderSettingsExtras();
         }
 
         // ---------- Pengaturan penilaian ----------
@@ -78,30 +79,38 @@
         }
 
         function saveSchoolSettings() {
-            settings.school = document.getElementById('setSchool').value;
+            const isCloud = typeof Cloud !== 'undefined' && Cloud.enabled;
+            const canEditSchool = !isCloud || Cloud.isAdmin();
+
             settings.subject = document.getElementById('setSubject').value;
-            
-            let sAcy = document.getElementById('setAcademicYear');
-            if(sAcy) settings.academicYear = sAcy.value;
-            let sSem = document.getElementById('setSemester');
-            if(sSem) settings.semester = sSem.value;
-            
-            // Sinkronisasi dengan Data Periode Aktif agar UI Header & Sidebar otomatis berubah
-            let activePeriod = periods.find(p => p.id === activePeriodId);
-            if (activePeriod) {
-                activePeriod.year = settings.academicYear;
-                activePeriod.semester = settings.semester;
-            }
-            
             settings.teacher = document.getElementById('setTeacher').value;
             let sNipTea = document.getElementById('setNipTeacher');
             if(sNipTea) settings.nipTeacher = sNipTea.value;
-            
-            settings.principal = document.getElementById('setPrincipal').value;
-            let sNipPri = document.getElementById('setNipPrincipal');
-            if(sNipPri) settings.nipPrincipal = sNipPri.value;
+
+            if (canEditSchool) {
+                settings.school = document.getElementById('setSchool').value;
+                let sAcy = document.getElementById('setAcademicYear');
+                if(sAcy) settings.academicYear = sAcy.value;
+                let sSem = document.getElementById('setSemester');
+                if(sSem) settings.semester = sSem.value;
+                settings.principal = document.getElementById('setPrincipal').value;
+                let sNipPri = document.getElementById('setNipPrincipal');
+                if(sNipPri) settings.nipPrincipal = sNipPri.value;
+
+                // Sinkronisasi dengan Data Periode Aktif agar UI Header & Sidebar (serta guru lain di mode cloud) berubah
+                let activePeriod = periods.find(p => p.id === activePeriodId);
+                if (activePeriod) {
+                    activePeriod.year = settings.academicYear;
+                    activePeriod.semester = settings.semester;
+                    if (isCloud) {
+                        activePeriod.school = settings.school;
+                        activePeriod.principal = settings.principal;
+                        activePeriod.nipPrincipal = settings.nipPrincipal;
+                    }
+                }
+            }
 
             saveAllData();
             updateHeader();
-            showModal("Sukses", "Pengaturan sekolah dan periode berhasil disimpan.", "✅");
+            showModal("Sukses", canEditSchool ? "Pengaturan sekolah dan periode berhasil disimpan." : "Profil mata pelajaran dan data guru berhasil disimpan.", "✅");
         }

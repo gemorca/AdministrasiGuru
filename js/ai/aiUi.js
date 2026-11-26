@@ -10,20 +10,25 @@ const AIUI = (() => {
 
     function cfg() { return settings.ai; }
 
-    // ---------- konfigurasi bersama (app-config.js) ----------
+    // ---------- konfigurasi bersama (app-config.js) & mode cloud ----------
+    function isCloud() { return typeof Cloud !== 'undefined' && !!Cloud.enabled; }
     function sharedCfg() { return (typeof window !== 'undefined' && window.APP_CONFIG && window.APP_CONFIG.ai) || {}; }
     /** Tersedia konfigurasi bersama (URL proxy dan token terisi di app-config.js). */
     function hasShared() { const m = sharedCfg(); return !!(m.proxyUrl && m.token); }
-    /** Dipakai bila ada konfigurasi bersama dan guru tidak memilih pengaturan sendiri. */
-    function isManaged() { return hasShared() && !cfg().custom; }
+    /** Dipakai bila mode cloud aktif ATAU ada konfigurasi bersama dan guru tidak memilih pengaturan sendiri. */
+    function isManaged() { return isCloud() || (hasShared() && !cfg().custom); }
     function effectiveConfig() {
         const c = cfg();
-        if (!isManaged()) return c;
         const m = sharedCfg();
+        if (isCloud()) {
+            return { ...c, mode: 'cloud',
+                model: c.modelChosen ? c.model : (m.model || c.model), fallbackModel: c.modelChosen ? c.fallbackModel : (m.fallbackModel || c.fallbackModel) };
+        }
+        if (!isManaged()) return c;
         return { ...c, mode: 'proxy', proxyUrl: m.proxyUrl,
             model: c.modelChosen ? c.model : (m.model || c.model), fallbackModel: c.modelChosen ? c.fallbackModel : (m.fallbackModel || c.fallbackModel) };
     }
-    function effectiveSecret() { return isManaged() ? sharedCfg().token : Store.secretGet(); }
+    function effectiveSecret() { return isCloud() ? '' : (isManaged() ? sharedCfg().token : Store.secretGet()); }
 
     // ---------- pilihan model ----------
     const MODEL_CHOICES = [
@@ -90,8 +95,18 @@ const AIUI = (() => {
         el.classList.remove('hidden');
     }
 
-    /** Tampilkan/sembunyikan kolom koneksi sesuai mode dan konfigurasi bersama. */
+    /** Tampilkan/sembunyikan kolom koneksi sesuai mode, konfigurasi bersama, dan mode cloud. */
     function applyConnVisibility() {
+        const cloud = isCloud();
+        if (cloud) {
+            $('aiCustomRow').classList.add('hidden');
+            $('aiConnGroup').classList.add('hidden');
+            $('aiClearBtn').classList.add('hidden');
+            $('aiManagedNote').innerText = 'Koneksi AI terhubung lewat server sekolah menggunakan sesi login Anda. Anda tidak perlu mengisi URL atau kunci API. Cukup aktifkan AI, setujui privasi, lalu Simpan.';
+            $('aiManagedNote').classList.remove('hidden');
+            return;
+        }
+        $('aiManagedNote').innerText = 'Koneksi AI sudah diatur oleh admin sekolah. Anda tidak perlu mengisi URL atau token. Cukup aktifkan AI, setujui privasi, lalu Simpan.';
         const shared = hasShared();
         const custom = shared ? $('setAiCustom').checked : true;
         $('aiCustomRow').classList.toggle('hidden', !shared);
@@ -141,9 +156,10 @@ const AIUI = (() => {
 
     function save() {
         const c = cfg();
+        const cloud = isCloud();
         const shared = hasShared();
-        const custom = shared ? $('setAiCustom').checked : true;
-        const managedNow = shared && !custom;
+        const custom = cloud ? false : (shared ? $('setAiCustom').checked : true);
+        const managedNow = cloud || (shared && !custom);
         const mode = $('setAiMode').value === 'direct' ? 'direct' : 'proxy';
         const proxyUrl = $('setAiProxyUrl').value.trim();
         const model = readModel('setAiModelSelect', 'setAiModel');
@@ -200,15 +216,19 @@ const AIUI = (() => {
         testing = true;
         const btn = $('aiTestBtn'); if (btn) { btn.disabled = true; btn.innerText = 'Menguji...'; }
         let stage = '';
-        const stageText = s => s === 'proxy' ? 'Tahap 1 dari 2: menghubungi proxy Apps Script (maks 20 detik)...' : 'Tahap 2 dari 2: menghubungi Gemini (maks 60 detik, mohon tunggu)...';
-        msg(st.mode === 'proxy' ? stageText('proxy') : stageText('gemini'), 'info');
+        const stageText = s => s === 'proxy'
+            ? (st.mode === 'cloud' ? 'Tahap 1 dari 2: memeriksa sesi login & server sekolah...' : 'Tahap 1 dari 2: menghubungi proxy Apps Script (maks 20 detik)...')
+            : 'Tahap 2 dari 2: menghubungi Gemini (maks 60 detik, mohon tunggu)...';
+        msg((st.mode === 'proxy' || st.mode === 'cloud') ? stageText('proxy') : stageText('gemini'), 'info');
         try {
             const r = await AIService.ping(undefined, s => { stage = s; msg(stageText(s), 'info'); });
             cfg().lastTestOk = new Date().toISOString();
             saveAllData();
-            msg(`Koneksi berhasil.${r.proxyMs !== null ? ` Proxy ${r.proxyMs} ms.` : ''} Model ${r.model}${r.fallback ? ' (MODEL CADANGAN, model utama sedang bermasalah)' : ''}, format keluaran terstruktur "${r.style}", Gemini menjawab dalam ${r.ms} ms.`, 'ok');
+            const hopLabel = st.mode === 'cloud' ? 'Server' : 'Proxy';
+            msg(`Koneksi berhasil.${r.proxyMs !== null ? ` ${hopLabel} ${r.proxyMs} ms.` : ''} Model ${r.model}${r.fallback ? ' (MODEL CADANGAN, model utama sedang bermasalah)' : ''}, format keluaran terstruktur "${r.style}", Gemini menjawab dalam ${r.ms} ms.`, 'ok');
         } catch (e) {
-            const where = (e.stage === 'gemini' || stage === 'gemini') && st.mode === 'proxy' ? ' (tahap 2: Gemini)' : (stage === 'proxy' ? ' (tahap 1: proxy)' : '');
+            const stage1Label = st.mode === 'cloud' ? 'server' : 'proxy';
+            const where = (e.stage === 'gemini' || stage === 'gemini') && (st.mode === 'proxy' || st.mode === 'cloud') ? ' (tahap 2: Gemini)' : (stage === 'proxy' ? ` (tahap 1: ${stage1Label})` : '');
             msg(`Gagal [${e.code || 'ERROR'}]${where}: ${e.message}`, 'err');
         } finally {
             testing = false;
@@ -308,13 +328,17 @@ const AIUI = (() => {
     function reviewCancel() { reviewState = null; $('modalAiReview').classList.add('hidden'); }
 
     function init() {
+        const cloudProvider = () => isCloud() ? ({
+            endpoint: (typeof window !== 'undefined' && window.APP_CONFIG && window.APP_CONFIG.aiEndpoint) || '/api/gemini',
+            getToken: () => (typeof Auth !== 'undefined' ? Auth.getAccessToken() : '')
+        }) : null;
         AIService.use({
-            config: effectiveConfig, secret: effectiveSecret,
+            config: effectiveConfig, secret: effectiveSecret, cloud: cloudProvider,
             onStyleResolved: s => { cfg().styleResolved = s; saveAllData(); }
         });
-        // Konfigurasi bersama: AI aktif otomatis untuk guru yang belum pernah mengubah pengaturan.
+        // Konfigurasi bersama / mode cloud: AI aktif otomatis untuk guru yang belum pernah mengubah pengaturan.
         if (isManaged() && !cfg().touched && !cfg().enabled) { cfg().enabled = true; saveAllData(); }
     }
 
-    return { review, reviewSave, reviewCancel, pii, fail, run, render, save, test, clearSecret, onModeChange, onModelChange, loadModels, applyConnVisibility, isManaged, hasShared, MODEL_CHOICES, ensureReady, acceptPrivacy, applyVisibility, refreshUsage, init, HIDE_WHEN_OFF };
+    return { review, reviewSave, reviewCancel, pii, fail, run, render, save, test, clearSecret, onModeChange, onModelChange, loadModels, applyConnVisibility, isManaged, isCloud, hasShared, MODEL_CHOICES, ensureReady, acceptPrivacy, applyVisibility, refreshUsage, init, HIDE_WHEN_OFF };
 })();

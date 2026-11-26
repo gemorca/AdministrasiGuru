@@ -6,4 +6,5 @@ set -e
 mkdir -p vendor
 curl -fsSL https://cdn.tailwindcss.com/3.4.17 -o vendor/tailwind.js
 curl -fsSL https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.js -o vendor/chart.umd.js
+curl -fsSL https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js -o vendor/supabase.js
 ls -l vendor

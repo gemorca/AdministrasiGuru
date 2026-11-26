@@ -31,16 +31,32 @@ const Store = (() => {
     const DATA_KEYS = [...LIST_KEYS, ...OBJECT_KEYS];
 
     const sigCache = {}; // key -> { recordId: signature } untuk mendeteksi perubahan (updatedAt)
+    const changeListeners = new Set();
+    let ownerResolver = null;
     let errorHandler = null;
     let lastErrorAt = 0;
 
-    const clone = v => JSON.parse(JSON.stringify(v));
+    const clone = v => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
     const nowIso = () => new Date().toISOString();
+
+    // Penyimpanan fallback di memori bila dijalankan di lingkungan tanpa localStorage (mis. Node.js)
+    const memFallback = new Map();
+    const ls = {
+        getItem: k => (typeof localStorage !== 'undefined' ? localStorage.getItem(k) : (memFallback.has(k) ? memFallback.get(k) : null)),
+        setItem: (k, v) => { if (typeof localStorage !== 'undefined') localStorage.setItem(k, String(v)); else memFallback.set(k, String(v)); },
+        removeItem: k => { if (typeof localStorage !== 'undefined') localStorage.removeItem(k); else memFallback.delete(k); },
+        keys: () => {
+            if (typeof localStorage === 'undefined') return Array.from(memFallback.keys());
+            const out = []; try { for (let i = 0; i < localStorage.length; i++) out.push(localStorage.key(i)); } catch (_) {}
+            return out;
+        }
+    };
 
     // ---------- Lapisan fisik ----------
     // mode 'local'  : localStorage langsung.
     // mode 'idb'    : Map di memori (sumber baca) + penulisan ke IndexedDB di latar.
     const IDB_NAME = 'sistem_admin_guru', IDB_STORE = 'kv';
+    const META_PREFIX = 'g_meta_';
     const NON_DATA = new Set(['g_ai_secret', 'g_ai_usage']); // tetap di localStorage
     let mode = 'local';
     let db = null;
@@ -70,13 +86,12 @@ const Store = (() => {
         } catch (e) { trackEnd(); }
     }
 
-    function rawGet(k) { if (mode === 'idb' && !NON_DATA.has(k)) return mem.has(k) ? mem.get(k) : null; return localStorage.getItem(k); }
-    function rawSet(k, v) { if (mode === 'idb' && !NON_DATA.has(k)) { mem.set(k, v); idbPut(k, v); return; } localStorage.setItem(k, v); }
-    function rawRemove(k) { if (mode === 'idb' && !NON_DATA.has(k)) { mem.delete(k); idbDelete(k); return; } localStorage.removeItem(k); }
+    function rawGet(k) { if (mode === 'idb' && !NON_DATA.has(k)) return mem.has(k) ? mem.get(k) : null; return ls.getItem(k); }
+    function rawSet(k, v) { if (mode === 'idb' && !NON_DATA.has(k)) { mem.set(k, v); idbPut(k, v); return; } ls.setItem(k, v); }
+    function rawRemove(k) { if (mode === 'idb' && !NON_DATA.has(k)) { mem.delete(k); idbDelete(k); return; } ls.removeItem(k); }
     function rawKeys() {
         if (mode === 'idb') return Array.from(mem.keys());
-        const out = []; try { for (let i = 0; i < localStorage.length; i++) out.push(localStorage.key(i)); } catch (_) {}
-        return out;
+        return ls.keys();
     }
 
     function openDb() {
@@ -195,35 +210,156 @@ const Store = (() => {
         }
     }
 
-    /** Tulis satu kunci. Daftar record dicap createdAt/updatedAt/ownerId. Mengembalikan true jika berhasil. */
-    function write(key, value) {
+    /**
+     * Tulis satu kunci. Daftar record dicap createdAt/updatedAt/ownerId (kecuali opts.keepStamps).
+     * Bila !opts.silent, perubahan per record dilaporkan ke listener onChange (termasuk tombstone hapus).
+     * Mengembalikan true jika berhasil.
+     */
+    function write(key, value, opts) {
+        const silent = !!(opts && opts.silent);
+        const keepStamps = !!(opts && opts.keepStamps);
+        const defaultOwner = typeof ownerResolver === 'function' ? ownerResolver(key) : null;
+        let prevRaw = null;
+        if (!silent && changeListeners.size > 0) {
+            try { prevRaw = rawGet(key); } catch (_) {}
+        }
+
         if (Array.isArray(value)) {
             const cache = sigCache[key] || (sigCache[key] = {});
             const t = nowIso();
+            const nextCache = {};
             for (const r of value) {
                 if (!r || typeof r !== 'object') continue;
-                if (!('ownerId' in r)) r.ownerId = null;
-                if (!r.createdAt) r.createdAt = t;
+                if (!keepStamps) {
+                    if (!('ownerId' in r)) r.ownerId = defaultOwner;
+                    else if (r.ownerId === null && defaultOwner !== null) r.ownerId = defaultOwner;
+                    if (!r.createdAt) r.createdAt = t;
+                } else {
+                    if (!('ownerId' in r)) r.ownerId = defaultOwner;
+                    if (!r.createdAt) r.createdAt = r.updatedAt || t;
+                }
                 const id = recordId(r, key);
                 if (id) {
                     const sig = signature(r);
-                    if (cache[id] === undefined || cache[id] !== sig) r.updatedAt = t;
-                    else if (!r.updatedAt) r.updatedAt = r.createdAt;
-                    cache[id] = signature(r);
+                    if (!keepStamps) {
+                        if (cache[id] === undefined || cache[id] !== sig) r.updatedAt = t;
+                        else if (!r.updatedAt) r.updatedAt = r.createdAt;
+                    } else if (!r.updatedAt) {
+                        r.updatedAt = r.createdAt;
+                    }
+                    nextCache[id] = signature(r);
                 } else if (!r.updatedAt) {
                     r.updatedAt = r.createdAt;
                 }
             }
+            sigCache[key] = nextCache;
         }
+
+        const serialized = JSON.stringify(value);
         try {
-            rawSet(key, JSON.stringify(value));
-            return true;
+            rawSet(key, serialized);
         } catch (e) {
             reportError(isQuotaError(e)
                 ? 'Penyimpanan browser penuh. Data terakhir BELUM tersimpan. Lakukan Backup lalu kurangi data lama.'
                 : 'Data gagal disimpan: ' + (e && e.message ? e.message : e));
             return false;
         }
+
+        if (!silent && changeListeners.size > 0 && DATA_KEYS.includes(key)) {
+            const changes = diffChanges(key, prevRaw, value, serialized, defaultOwner);
+            if (changes.length) {
+                changeListeners.forEach(fn => { try { fn(changes, key); } catch (_) {} });
+            }
+        }
+        return true;
+    }
+
+    function diffChanges(key, prevRaw, nextVal, nextJson, defaultOwner) {
+        const t = nowIso();
+        const out = [];
+        if (Array.isArray(nextVal)) {
+            let prevArr = [];
+            if (prevRaw !== null) {
+                try { const p = JSON.parse(prevRaw); if (Array.isArray(p)) prevArr = p; } catch (_) {}
+            }
+            const prevById = new Map();
+            for (const r of prevArr) {
+                const id = recordId(r, key);
+                if (id) prevById.set(id, r);
+            }
+            for (const r of nextVal) {
+                const id = recordId(r, key);
+                if (!id) continue;
+                const prev = prevById.get(id);
+                prevById.delete(id);
+                if (!prev || signature(prev) !== signature(r)) {
+                    out.push({
+                        tbl: key,
+                        id: String(id),
+                        record: clone(r),
+                        deleted: false,
+                        clientAt: r.updatedAt || t,
+                        ownerId: r.ownerId !== undefined ? r.ownerId : defaultOwner
+                    });
+                }
+            }
+            for (const [delId, prevRec] of prevById.entries()) {
+                out.push({
+                    tbl: key,
+                    id: String(delId),
+                    record: null,
+                    deleted: true,
+                    clientAt: t,
+                    ownerId: (prevRec && prevRec.ownerId !== undefined) ? prevRec.ownerId : defaultOwner
+                });
+            }
+        } else if (OBJECT_KEYS.includes(key) && nextVal && typeof nextVal === 'object') {
+            if (prevRaw !== nextJson) {
+                out.push({
+                    tbl: key,
+                    id: 'settings',
+                    record: clone(nextVal),
+                    deleted: false,
+                    clientAt: t,
+                    ownerId: defaultOwner
+                });
+            }
+        }
+        return out;
+    }
+
+    function onChange(fn) {
+        changeListeners.add(fn);
+        return () => changeListeners.delete(fn);
+    }
+
+    function setOwnerResolver(fn) {
+        ownerResolver = typeof fn === 'function' ? fn : null;
+    }
+
+    function metaGet(name, fallback = null) {
+        let raw = null;
+        try { raw = rawGet(META_PREFIX + name); } catch (_) { return clone(fallback); }
+        if (raw === null) return clone(fallback);
+        try { return JSON.parse(raw); } catch (_) { return clone(fallback); }
+    }
+
+    function metaSet(name, value) {
+        const k = META_PREFIX + name;
+        if (value === null || value === undefined) { remove(k); return true; }
+        try { rawSet(k, JSON.stringify(value)); return true; } catch (_) { return false; }
+    }
+
+    /** Menghapus seluruh data aplikasi dan metadata sinkronisasi (dipakai saat ganti akun di perangkat yang sama). */
+    async function wipe() {
+        for (const k of DATA_KEYS) remove(k);
+        remove(SCHEMA_KEY);
+        remove(BACKUP_KEY);
+        for (const k of rawKeys().slice()) {
+            if (k && (k.startsWith(META_PREFIX) || k.startsWith('g_corrupt_'))) remove(k);
+        }
+        Object.keys(sigCache).forEach(k => delete sigCache[k]);
+        await flush();
     }
 
     function remove(key) { try { rawRemove(key); } catch (_) {} }
@@ -231,12 +367,12 @@ const Store = (() => {
     // Rahasia (API key / token proxy AI). Kunci terpisah, TIDAK termasuk DATA_KEYS:
     // tidak ikut backup, tidak ikut snapshot migrasi, tidak terhapus oleh restore.
     const SECRET_KEY = 'g_ai_secret';
-    function secretGet() { try { return localStorage.getItem(SECRET_KEY) || ''; } catch (_) { return ''; } }
+    function secretGet() { try { return ls.getItem(SECRET_KEY) || ''; } catch (_) { return ''; } }
     function secretSet(v) {
-        try { localStorage.setItem(SECRET_KEY, String(v)); return true; }
+        try { ls.setItem(SECRET_KEY, String(v)); return true; }
         catch (e) { reportError('Kunci AI gagal disimpan: penyimpanan browser penuh.'); return false; }
     }
-    function secretClear() { remove(SECRET_KEY); }
+    function secretClear() { try { ls.removeItem(SECRET_KEY); } catch (_) {} }
 
     /** Perkiraan pemakaian. local: UTF-16 2 byte/karakter vs batas ±5 MB. idb: ukuran data vs kuota browser (bila diketahui). */
     function usage() {
@@ -310,8 +446,11 @@ const Store = (() => {
 
     return {
         init, flush, read, write, remove, usage, migrate, secretGet, secretSet, secretClear,
+        onChange, setOwnerResolver, metaGet, metaSet, wipe, recordId,
         get backend() { return mode; }, get initInfo() { return initInfo; },
-        DATA_KEYS, LIST_KEYS, SCHEMA_VERSION, BACKUP_KEY,
+        DATA_KEYS, LIST_KEYS, OBJECT_KEYS, SCHEMA_VERSION, BACKUP_KEY,
         set onError(fn) { errorHandler = fn; }
     };
 })();
+
+if (typeof module !== 'undefined' && module.exports) module.exports = Store;

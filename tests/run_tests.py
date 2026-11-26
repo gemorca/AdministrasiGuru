@@ -21,9 +21,10 @@ class _Quiet(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *a): pass
 
 def serve(directory):
-    """Server HTTP lokal. Dipakai karena localStorage di file:// tidak konsisten antar muat ulang di Chromium."""
+    """Server HTTP lokal multi-utas. Dipakai karena localStorage di file:// tidak konsisten antar muat ulang, dan Chrome memakai keep-alive paralel."""
     handler = functools.partial(_Quiet, directory=str(directory))
-    srv = socketserver.TCPServer(('127.0.0.1', 0), handler)
+    srv = socketserver.ThreadingTCPServer(('127.0.0.1', 0), handler)
+    srv.daemon_threads = True
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     return 'http://127.0.0.1:%d' % srv.server_address[1]
 
@@ -1492,9 +1493,357 @@ def run_tahap6_paket(br):
     ctx.close()
 
 
+# ------------------------------------------------------------------ Tahap 7: login, sinkronisasi, multi-guru (window.RemoteAdapter)
+FAKE_CLOUD_JS = r"""
+(() => {
+    window.APP_CONFIG = {
+        storage: 'local',
+        supabaseUrl: 'https://uji-sekolah.supabase.co',
+        supabaseAnonKey: 'anon-uji-key',
+        aiEndpoint: 'http://127.0.0.1/__cloud_ai',
+        syncPollMs: 0,
+        ai: { model: 'gemini-3.6-flash', fallbackModel: 'gemini-3.5-flash-lite' }
+    };
+    const SHARED = new Set(['g_per', 'g_cls', 'g_stu']);
+    const state = window.__cloudServer || (window.__cloudServer = {
+        school: { id: 'sch-1', name: 'SMP Negeri Cloud 1' },
+        invites: [
+            { id: 'inv-admin', email: 'admin@sekolah.id', role: 'admin', claimed_by: null, created_at: '2026-11-26T00:00:00Z' },
+            { id: 'inv-t2', email: 'guru2@sekolah.id', role: 'teacher', claimed_by: null, created_at: '2026-11-26T00:00:00Z' }
+        ],
+        members: [],
+        records: [],
+        seq: 0,
+        pushCalls: [],
+        pullCalls: [],
+        failPush: false
+    });
+    let session = window.__initialSession || null;
+    const listeners = [];
+    window.__setNextGoogleUser = u => { window.__nextGoogleUser = u; };
+    window.__setFailPush = v => { state.failPush = !!v; };
+
+    function findMember(uid) { return state.members.find(m => m.user_id === uid) || null; }
+
+    window.RemoteAdapter = {
+        async getSession() { return session; },
+        async getAccessToken() { return session ? session.accessToken : ''; },
+        onAuthStateChange(cb) { listeners.push(cb); return () => {}; },
+        async signInWithGoogle() {
+            const u = window.__nextGoogleUser;
+            if (!u) throw new Error('Pengguna uji Google belum disiapkan');
+            session = { accessToken: 'jwt-' + u.id, user: u };
+            listeners.forEach(fn => fn('SIGNED_IN', session));
+            return { url: null };
+        },
+        async signOut() {
+            session = null;
+            listeners.forEach(fn => fn('SIGNED_OUT', null));
+        },
+        async claimInvite() {
+            if (!session) return { ok: false, reason: 'UNAUTHENTICATED' };
+            const u = session.user;
+            let mem = findMember(u.id);
+            if (mem) {
+                return { ok: true, claimed: false, user_id: u.id, email: mem.email, name: mem.name, role: mem.role, school_id: state.school.id, school_name: state.school.name };
+            }
+            const inv = state.invites.find(i => i.email.toLowerCase() === u.email.toLowerCase() && !i.claimed_by);
+            if (!inv) return { ok: false, reason: 'NOT_INVITED', email: u.email };
+            inv.claimed_by = u.id;
+            mem = { user_id: u.id, email: u.email.toLowerCase(), name: u.name || u.email.split('@')[0], role: inv.role, created_at: new Date().toISOString() };
+            state.members.push(mem);
+            return { ok: true, claimed: true, user_id: u.id, email: mem.email, name: mem.name, role: mem.role, school_id: state.school.id, school_name: state.school.name };
+        },
+        async push(items) {
+            if (state.failPush) throw new Error('Simulasi jaringan terputus');
+            const mem = session ? findMember(session.user.id) : null;
+            if (!mem) throw new Error('NOT_MEMBER');
+            state.pushCalls.push(JSON.parse(JSON.stringify(items)));
+            const accepted = [], rejected = [];
+            for (const it of (items || [])) {
+                const isShared = SHARED.has(it.tbl);
+                if (isShared && mem.role !== 'admin') {
+                    rejected.push({ tbl: it.tbl, id: it.id, reason: 'RLS_FORBIDDEN' });
+                    continue;
+                }
+                const owner_id = isShared ? null : mem.user_id;
+                if (!isShared && it.owner_id && it.owner_id !== mem.user_id) {
+                    rejected.push({ tbl: it.tbl, id: it.id, reason: 'RLS_FORBIDDEN' });
+                    continue;
+                }
+                const existing = state.records.find(r => r.tbl === it.tbl && r.id === it.id && r.owner_id === owner_id);
+                state.seq += 1;
+                if (!existing) {
+                    state.records.push({ tbl: it.tbl, id: it.id, owner_id, data: it.deleted ? null : it.data, deleted: !!it.deleted, client_at: it.client_at, seq: state.seq });
+                } else if (!existing.client_at || String(it.client_at) >= String(existing.client_at)) {
+                    existing.data = it.deleted ? null : it.data;
+                    existing.deleted = !!it.deleted;
+                    existing.client_at = it.client_at;
+                    existing.seq = state.seq;
+                }
+                accepted.push({ tbl: it.tbl, id: it.id, seq: state.seq });
+            }
+            return { accepted, rejected, max_seq: state.seq };
+        },
+        async pull(sinceSeq = 0, limit = 500) {
+            const mem = session ? findMember(session.user.id) : null;
+            if (!mem) throw new Error('NOT_MEMBER');
+            state.pullCalls.push({ user: mem.user_id, since: sinceSeq, limit });
+            const visible = state.records
+                .filter(r => r.seq > sinceSeq && (r.owner_id === null || r.owner_id === mem.user_id))
+                .sort((a, b) => a.seq - b.seq);
+            const rows = visible.slice(0, limit);
+            return { rows: JSON.parse(JSON.stringify(rows)), has_more: visible.length > limit, last_seq: rows.length ? rows[rows.length - 1].seq : sinceSeq };
+        },
+        async getRecord(tbl, id) {
+            const mem = session ? findMember(session.user.id) : null;
+            if (!mem) throw new Error('NOT_MEMBER');
+            return state.records.find(r => r.tbl === tbl && r.id === id && (r.owner_id === null || r.owner_id === mem.user_id)) || null;
+        },
+        async listTeam() {
+            return {
+                members: JSON.parse(JSON.stringify(state.members)),
+                invites: JSON.parse(JSON.stringify(state.invites.filter(i => !i.claimed_by)))
+            };
+        },
+        async inviteMember(email, role) {
+            const em = String(email || '').trim().toLowerCase();
+            if (state.members.some(m => m.email === em)) return { ok: false, reason: 'ALREADY_MEMBER' };
+            const inv = { id: 'inv-' + (state.invites.length + 1), email: em, role: role === 'admin' ? 'admin' : 'teacher', claimed_by: null, created_at: new Date().toISOString() };
+            state.invites.push(inv);
+            return { ok: true, invite: inv };
+        },
+        async revokeInvite(id) {
+            state.invites = state.invites.filter(i => i.id !== id);
+            return { ok: true };
+        },
+        async setMemberRole(uid, role) {
+            const m = findMember(uid);
+            if (m) m.role = role;
+            return { ok: true };
+        },
+        async removeMember(uid) {
+            state.members = state.members.filter(m => m.user_id !== uid);
+            return { ok: true };
+        }
+    };
+})();
+"""
+
+def open_cloud_page(ctx, seed_data=None, server_state=None, initial_session=None):
+    page = ctx.new_page()
+    errs = []
+    page.on('pageerror', lambda e: errs.append('pageerror: ' + str(e)[:200]))
+    page.on('console', lambda m: errs.append('console.error: ' + m.text[:200]) if m.type == 'error' and 'Failed to load resource' not in m.text else None)
+    init_js = DET
+    if seed_data is not None:
+        init_js += "if(!localStorage.getItem('__seeded')){const d=%s;for(const k in d)localStorage.setItem(k,JSON.stringify(d[k]));localStorage.setItem('__seeded','1');}" % json.dumps(seed_data)
+    if server_state is not None:
+        init_js += "window.__cloudServer = %s;" % json.dumps(server_state)
+    if initial_session is not None:
+        init_js += "window.__initialSession = %s;" % json.dumps(initial_session)
+    init_js += FAKE_CLOUD_JS
+    page.add_init_script(init_js)
+    # Pastikan app-config.js tidak menimpa APP_CONFIG cloud yang sudah disuntik
+    ctx.route('**/app-config.js*', lambda r: r.fulfill(status=200, content_type='application/javascript', body='/* cloud test */'))
+    page.goto(INDEX)
+    page.wait_for_function("typeof Auth === 'object' && typeof Sync === 'object'")
+    return page, errs
+
+def run_tahap7(br):
+    # --- C1: gerbang login & penolakan email yang belum diundang
+    ctx = new_ctx(br)
+    page, errs = open_cloud_page(ctx)
+    page.wait_for_function("!document.getElementById('authGate').classList.contains('hidden') && !document.getElementById('authPanelLogin').classList.contains('hidden')")
+    check('C1a mode cloud tanpa sesi: gerbang login tampil dan aplikasi utama belum dimuat',
+          page.locator('#navMenu button').count() == 0 and not errs, errs)
+    page.evaluate("window.__setNextGoogleUser({id:'u-asing', email:'asing@luar.id', name:'Orang Asing'})")
+    page.click('#btnGoogleLogin')
+    page.wait_for_function("!document.getElementById('authPanelDenied').classList.contains('hidden')")
+    check('C1b akun belum diundang ditolak di gerbang dan tidak membuka menu aplikasi',
+          'asing@luar.id' in page.evaluate("document.getElementById('authDeniedEmail').innerText") and page.locator('#navMenu button').count() == 0 and page.evaluate("Cloud.ready") is False)
+    page.click('#btnDeniedLogout')
+    page.wait_for_function("!document.getElementById('authPanelLogin').classList.contains('hidden')")
+    check('C1c tombol Ganti Akun mengembalikan ke layar masuk Google', True)
+
+    # --- C2: Admin masuk, tanpa siswa contoh, kelola sekolah/kelas/siswa, dan undang guru
+    page.evaluate("window.__setNextGoogleUser({id:'u-admin', email:'admin@sekolah.id', name:'Ibu Admin'})")
+    page.click('#btnGoogleLogin')
+    page.wait_for_function("document.querySelectorAll('#navMenu button').length === 23 && document.getElementById('authGate').classList.contains('hidden')")
+    check('C2a admin diundang berhasil masuk: lencana Admin Sekolah tampil dan TANPA siswa contoh karangan',
+          page.evaluate("Cloud.role") == 'admin' and page.evaluate("allStudents.length") == 0 and 'Admin Sekolah' in page.evaluate("document.getElementById('cloudRoleBadge').innerText"))
+
+    goto_view(page, 'Kelas & Rombel')
+    page.evaluate("openModalClass()"); page.fill('#clsName', 'VIII.A'); page.select_option('#clsGrade', 'VIII'); page.evaluate("document.getElementById('formClass').requestSubmit()")
+    goto_view(page, 'Data Peserta Didik')
+    page.evaluate("openModalStudent()"); page.fill('#stNis', '3001'); page.fill('#stName', 'Rina Kartika'); page.select_option('#stGender', 'P'); page.evaluate("document.getElementById('formStudent').requestSubmit()")
+    goto_view(page, 'Pengaturan')
+    page.fill('#setSchool', 'SMP Negeri 7 Awan'); page.evaluate("saveSchoolSettings()")
+    page.fill('#inviteEmail', 'guru.ipa@sekolah.id'); page.select_option('#inviteRole', 'teacher'); page.evaluate("document.getElementById('formInviteTeacher').requestSubmit()")
+    page.wait_for_function("document.getElementById('adminInviteList').innerText.includes('guru.ipa@sekolah.id')")
+    page.evaluate("Sync.syncNow()"); page.wait_for_timeout(100)
+    srv = page.evaluate("window.__cloudServer")
+    check('C2b data kelas/siswa/periode admin tersinkron sebagai data sekolah (owner_id=null) dan undangan guru tercatat',
+          any(r['tbl'] == 'g_stu' and r['owner_id'] is None and r['data']['name'] == 'Rina Kartika' for r in srv['records'])
+          and any(i['email'] == 'guru.ipa@sekolah.id' and i['role'] == 'teacher' for i in srv['invites']), len(srv['records']))
+    ctx.close()
+
+    # --- C3: Guru Mapel masuk, menerima data sekolah sebelum initApp, pembatasan UI & guard, isolasi data guru
+    ctx = new_ctx(br)
+    t_sess = {'accessToken': 'jwt-u-guru1', 'user': {'id': 'u-guru1', 'email': 'guru.ipa@sekolah.id', 'name': 'Pak Hendra'}}
+    page, errs = open_cloud_page(ctx, server_state=srv, initial_session=t_sess)
+    page.wait_for_function("document.querySelectorAll('#navMenu button').length === 23 && document.getElementById('authGate').classList.contains('hidden')")
+    check('C3a guru mapel menerima nama sekolah, kelas, dan siswa dari tarik awal SEBELUM initApp',
+          page.evaluate("Cloud.role") == 'teacher'
+          and page.evaluate("settings.school") == 'SMP Negeri 7 Awan'
+          and 'VIII.A' in page.evaluate("classes.map(c=>c.className)")
+          and page.evaluate("allStudents.map(s=>s.name)") == ['Rina Kartika'])
+
+    goto_view(page, 'Data Peserta Didik')
+    stu_ui = page.evaluate("""()=>({
+        addHidden: document.querySelector('button[onclick="openModalStudent()"]').classList.contains('hidden'),
+        impHidden: document.querySelector('#view-students label[data-admin-only]').classList.contains('hidden'),
+        rowActHidden: [...document.querySelectorAll('#studentTableBody [data-admin-only]')].every(e=>e.classList.contains('hidden')),
+        noteShown: !document.getElementById('studentReadonlyNote').classList.contains('hidden')
+    })""")
+    check('C3b UI siswa untuk guru biasa menyembunyikan tombol tambah/impor/edit/hapus dan menampilkan catatan baca-saja',
+          all(stu_ui.values()), stu_ui)
+
+    goto_view(page, 'Kelas & Rombel')
+    cls_ui = page.evaluate("""()=>({
+        addHidden: document.querySelector('button[onclick="openModalClass()"]').classList.contains('hidden'),
+        rowEditHidden: [...document.querySelectorAll('#classListBody [data-admin-only]')].every(e=>e.classList.contains('hidden'))
+    })""")
+    check('C3c UI kelas untuk guru biasa menyembunyikan tombol tambah/edit/hapus kelas', all(cls_ui.values()), cls_ui)
+
+    # Guard fungsi bila dipanggil paksa
+    pushes_before = page.evaluate("window.__cloudServer.pushCalls.length")
+    for call in [
+        "openModalStudent()",
+        "saveStudent({preventDefault(){}})",
+        "deleteStudent(allStudents[0].id)",
+        "importStudentsCSV({target:{files:[new File(['a,b,L'],'x.csv')], value:'x'}})",
+        "openModalClass()",
+        "saveClass({preventDefault(){}})",
+        "deleteClass(classes[0].classId)"
+    ]:
+        page.evaluate("closeModal()"); page.evaluate(call)
+        if 'Akses Dibatasi' not in modal_text(page):
+            check('C3d guard fungsi menolak ' + call, False, modal_text(page))
+            break
+    else:
+        check('C3d seluruh guard fungsi siswa & kelas menolak akses guru non-admin dengan nol push',
+              page.evaluate("window.__cloudServer.pushCalls.length") == pushes_before and page.evaluate("allStudents.length") == 1)
+    page.evaluate("closeModal()")
+
+    goto_view(page, 'Pengaturan')
+    set_ui = page.evaluate("""()=>({
+        schDisabled: document.getElementById('setSchool').disabled && document.getElementById('setAcademicYear').disabled && document.getElementById('setSemester').disabled,
+        teamHidden: document.getElementById('adminTeamCard').classList.contains('hidden'),
+        aiConnHidden: document.getElementById('aiConnGroup').classList.contains('hidden') && document.getElementById('aiCustomRow').classList.contains('hidden') && document.getElementById('aiClearBtn').classList.contains('hidden')
+    })""")
+    check('C3e pengaturan guru: kolom sekolah/periode terkunci, kartu tim admin tersembunyi, dan kolom rahasia AI tersembunyi',
+          all(set_ui.values()), set_ui)
+
+    # Guru menyimpan soal miliknya -> owner_id = u-guru1
+    goto_view(page, 'Bank Soal')
+    page.evaluate("document.getElementById('modalQuestionManual').classList.remove('hidden')"); page.fill('#qManCode', 'IPA-01'); page.fill('#qManText', 'Pertanyaan Guru IPA?'); page.evaluate("document.getElementById('formQuestionManual').requestSubmit()")
+    page.evaluate("Sync.syncNow()"); page.wait_for_timeout(100)
+    srv_after_t1 = page.evaluate("window.__cloudServer")
+    check('C3f data guru tersimpan dengan owner_id milik guru sendiri dan antrean bersih',
+          any(r['tbl'] == 'g_qst' and r['owner_id'] == 'u-guru1' and r['data']['code'] == 'IPA-01' for r in srv_after_t1['records'])
+          and page.evaluate("Sync.status().pending") == 0)
+
+    # --- C4: Uji Koneksi AI lewat endpoint cloud (/api/gemini) dengan Bearer JWT
+    ai_calls = []
+    def cloud_ai_route(r):
+        ai_calls.append({'auth': r.request.headers.get('authorization', ''), 'body': json.loads(r.request.post_data or '{}')})
+        b = ai_calls[-1]['body']
+        if b.get('op') == 'ping':
+            return r.fulfill(status=200, content_type='application/json', body=json.dumps({'ok': True, 'status': 200, 'ping': True}))
+        return r.fulfill(status=200, content_type='application/json', body=json.dumps({
+            'ok': True, 'status': 200,
+            'data': {'candidates': [{'content': {'parts': [{'text': '{"ok": true}'}]}}], 'usageMetadata': {'totalTokenCount': 9}}
+        }))
+    ctx.route('**/__cloud_ai', cloud_ai_route)
+    goto_view(page, 'Pengaturan')
+    page.set_checked('#setAiPrivacy', True); page.evaluate("AIUI.save()")
+    page.click('#aiTestBtn')
+    page.wait_for_function("document.getElementById('aiStatusMsg').innerText.includes('Koneksi berhasil')", timeout=10000)
+    check('C4a AI mode cloud mengirim Bearer JWT sesi ke server (ping + generate) tanpa rahasia lokal',
+          len(ai_calls) == 2 and all(c['auth'] == 'Bearer jwt-u-guru1' for c in ai_calls) and page.evaluate("Store.secretGet()") == '', ai_calls)
+
+    # --- C6: Keluar menunggu antrean kosong, lalu ganti akun di perangkat yang sama membersihkan data lokal (Store.wipe)
+    page.evaluate("window.__setFailPush(true)")
+    goto_view(page, 'Bank Soal')
+    page.evaluate("document.getElementById('modalQuestionManual').classList.remove('hidden')"); page.fill('#qManCode', 'IPA-PENDING'); page.fill('#qManText', 'Tertahan luring'); page.evaluate("document.getElementById('formQuestionManual').requestSubmit()")
+    page.evaluate("closeModal()")
+    # Saat push gagal, klik Keluar harus memperingatkan pengguna (tidak langsung membuang antrean diam-diam)
+    page.evaluate("Auth.logout()")
+    page.wait_for_function("!document.getElementById('modalConfirm').classList.contains('hidden')")
+    check('C6a keluar saat antrean belum terkirim memperingatkan jumlah perubahan yang tertahan',
+          'belum terkirim' in page.evaluate("document.getElementById('confirmMessage').innerText"))
+    page.evaluate("closeConfirm()")
+    # Pulihkan jaringan -> Keluar menguras antrean otomatis lalu kembali ke gerbang login
+    page.evaluate("window.__setFailPush(false)")
+    page.evaluate("Auth.logout()")
+    page.wait_for_function("!document.getElementById('authGate').classList.contains('hidden') && !document.getElementById('authPanelLogin').classList.contains('hidden')")
+    check('C6b setelah jaringan pulih, Keluar menguras antrean sampai 0 lalu menutup sesi',
+          any(r['tbl'] == 'g_qst' and r['data']['code'] == 'IPA-PENDING' for r in page.evaluate("window.__cloudServer.records")))
+
+    # Guru ke-2 masuk di perangkat yang sama -> peringatan ganti akun -> Store.wipe -> isolasi data
+    page.evaluate("window.__setNextGoogleUser({id:'u-guru2', email:'guru2@sekolah.id', name:'Bu Dewi'})")
+    page.click('#btnGoogleLogin')
+    page.wait_for_function("!document.getElementById('authPanelSwitch').classList.contains('hidden')")
+    check('C6c ganti akun di perangkat sama menampilkan peringatan privasi dengan email lama dan baru',
+          'guru.ipa@sekolah.id' in page.evaluate("document.getElementById('authSwitchPrevEmail').innerText")
+          and 'guru2@sekolah.id' in page.evaluate("document.getElementById('authSwitchNextEmail').innerText"))
+    page.click('#btnConfirmSwitch')
+    page.wait_for_function("document.getElementById('authGate').classList.contains('hidden') && Cloud.ready === true")
+    check('C6d setelah Store.wipe & tarik awal, Guru 2 tetap melihat siswa sekolah tetapi TIDAK melihat soal pribadi Guru 1',
+          page.evaluate("allStudents.map(s=>s.name)") == ['Rina Kartika']
+          and page.evaluate("allQuestions.length") == 0
+          and not errs, errs)
+    ctx.close()
+
+    # --- C5: Koneksi pertama dengan data lokal lama (enqueueAll: guru hanya milik guru, admin semua)
+    ctx = new_ctx(br)
+    srv_clean = copy.deepcopy(srv_after_t1)
+    srv_clean['invites'].append({'id': 'inv-t3', 'email': 'guru.lama@sekolah.id', 'role': 'teacher', 'claimed_by': None, 'created_at': '2026-11-26T00:00:00Z'})
+    srv_clean['pushCalls'] = []
+    sess_t3 = {'accessToken': 'jwt-u-guru3', 'user': {'id': 'u-guru3', 'email': 'guru.lama@sekolah.id', 'name': 'Guru Lama'}}
+    page, errs = open_cloud_page(ctx, seed_data=legacy_seed(), server_state=srv_clean, initial_session=sess_t3)
+    page.wait_for_function("!document.getElementById('authPanelFirstSync').classList.contains('hidden')")
+    page.click('#btnUploadLocal')
+    page.wait_for_function("document.getElementById('authGate').classList.contains('hidden') && Cloud.ready === true")
+    page.evaluate("Sync.syncNow()"); page.wait_for_timeout(150)
+    pushed_t3 = [it['tbl'] for batch in page.evaluate("window.__cloudServer.pushCalls") for it in batch]
+    check('C5a koneksi pertama sebagai Guru: mengunggah data milik guru (soal/nilai), TIDAK mengunggah siswa/kelas/periode lokal, dan memakai siswa sekolah',
+          'g_qst' in pushed_t3 and 'g_scr' in pushed_t3
+          and not ({'g_stu', 'g_cls', 'g_per'} & set(pushed_t3))
+          and page.evaluate("allStudents.map(s=>s.name)") == ['Rina Kartika']
+          and page.evaluate("allQuestions.length") == 1, pushed_t3[:10])
+    ctx.close()
+
+
+def launch_browser(p):
+    bname = os.environ.get('BROWSER', 'chromium')
+    bt = getattr(p, bname)
+    try:
+        return bt.launch()
+    except Exception:
+        if bname != 'chromium':
+            raise
+        for ch in ('chrome', 'msedge'):
+            try:
+                return bt.launch(channel=ch)
+            except Exception:
+                pass
+        raise
+
 def main():
     with sync_playwright() as p:
-        br = getattr(p, os.environ.get('BROWSER', 'chromium')).launch()  # BROWSER=firefox|webkit untuk uji lintas browser (perlu: playwright install firefox webkit)
+        br = launch_browser(p)  # BROWSER=firefox|webkit untuk uji lintas browser; otomatis jatuh ke Chrome/Edge sistem bila bundel Chromium belum diunduh
 
         # --- U1: seluruh menu terbuka tanpa galat + paritas dengan file asli
         ctx = new_ctx(br)
@@ -1725,6 +2074,7 @@ def main():
         run_tahap6_idb(br)
         run_tahap6_paket(br)
         run_ai_settings(br)
+        run_tahap7(br)
 
         br.close()
 

@@ -66,9 +66,9 @@ Aturan:
 | Tambahan | Konfigurasi bersama `app-config.js`, dropdown model + muat daftar dari Gemini, gaya ringkas terbatas, token per tugas | Selesai |
 | 5 | Narasi rapor, laporan wali, isi surat memakai Gemini; tabel rapor per TP nyata; `HIDE_WHEN_OFF = true`; simulasi dihapus (bagian 6) | Selesai |
 | 6 | Penguatan (bagian 7): backup v2, IndexedDB, paket asesmen + cetak kunci, penanda AI, skrip vendor selesai; sisa: salin vendor, uji lintas browser, ekspor docx/PDF, kop cetak seragam | **Sebagian** |
-| 7 | Login dan multi-guru (bagian 8) | Belum |
+| 7 | Login dan multi-guru dengan Supabase (bagian 8) | **Sebagian**: skema SQL+RLS, mesin sinkronisasi, fungsi Vercel Gemini, mode cloud AIService selesai dan teruji di Node; belum: adaptor supabase-js, layar login, pembatasan UI admin/guru, alur koneksi pertama, uji browser, PANDUAN.md |
 
-Pengujian terakhir: **129 uji unit** dan **250 uji browser** (tanpa file asli) lulus. Jalankan:
+Pengujian terakhir: **159 uji unit** dan **250 uji browser** (tanpa file asli) lulus. Jalankan:
 ```
 node --test tests/unit/*.test.js
 python3 tests/run_tests.py [path/ke/file_asli.html]
@@ -101,12 +101,28 @@ Belum (perlu internet/keputusan pengguna):
 - Kop dan format cetak laporan/rapor/surat belum diseragamkan; catatan AI belum ada di cetak rapor/surat.
 - Beberapa tab terbuka memakai salinan memori masing-masing (tulis terakhir menang), sama seperti sebelumnya.
 
-## 8. Tahap 7: login dan multi-guru (terakhir)
+## 8. Tahap 7: login dan multi-guru (keputusan dan status)
 
-- Login Google: aplikasi mengirim ID token ke proxy Apps Script; proxy memverifikasinya dan memeriksa daftar email/domain yang diizinkan (Script Properties). Menggantikan token bersama di `app-config.js`, sehingga tidak ada rahasia di browser guru.
-- Isi `ownerId` pada setiap record dan pisahkan data per guru. Pertimbangkan penyimpanan di Google Sheets lewat Apps Script dengan `Store` sebagai satu-satunya titik ganti (sinkronisasi multi-perangkat).
-- Batas pemakaian AI per guru di proxy.
-- Jika hanya satu guru: PIN/kata sandi lokal sudah cukup.
+Keputusan pengguna: **beberapa guru dalam satu sekolah, deploy Vercel, database Supabase.** Guru mapel berbeda berbagi kelas yang sama, jadi siswa/kelas/periode = data sekolah (dibagi), selain itu milik guru. Spreadsheet tidak lagi menjadi penyimpanan; arah yang diminta: Supabase = database (dan file seperti foto), Spreadsheet = pencatatan/rekap (lihat bagian 8b).
+
+Sudah ada (kode di repo, uji Node hijau):
+- `supabase/schema.sql`: tabel `schools, members, invites, records (generik: tbl,id,owner_id,data jsonb,deleted,client_at,seq), ai_usage`; RLS (data sekolah owner_id NULL: semua anggota baca, hanya admin tulis; data guru: hanya pemiliknya); RPC `claim_invite, push_records (versi client_at terbaru menang, pelanggaran RLS dikembalikan sebagai rejected), pull_records (kursor seq), get_record, ai_bump`. Tombstone untuk hapus. Belum diuji di Postgres sungguhan.
+- `js/domain/sync.js` (logika murni) dan `js/core/sync.js` (mesin: antrean tersimpan, retry bertahap, tarik berhalaman, data pending menang lokal, tanpa gema). `Store` punya `onChange`, `write(key,v,{silent,keepStamps})`, `metaGet/metaSet`.
+- `api/gemini.js` + `vercel.json`: fungsi Vercel pengganti proxy Apps Script (verifikasi JWT Supabase, keanggotaan, batas harian per guru lewat `ai_bump`, key Gemini hanya di env). `AIService` punya mode `cloud` (`deps.cloud()`), pesan CLOUD_AUTH/LIMIT/CONFIG.
+- Env Vercel: `GEMINI_API_KEY, SUPABASE_URL, SUPABASE_ANON_KEY, AI_DAILY_LIMIT`.
+
+Belum:
+- `js/core/remote-supabase.js` (adaptor supabase-js: session, signInWithOAuth Google, claim_invite, push/pull/get lewat RPC; pull memakai tumpang tindih kursor ±50) dan `js/app/auth.js` (gerbang login, ditolak bila belum diundang, `Cloud` state, status sinkron di header, keluar).
+- `boot.js`: bila `APP_CONFIG.supabaseUrl` ada -> login -> `claim_invite` -> tarik awal SEBELUM `initApp` -> `Sync.start`. Tanpa `supabaseUrl` aplikasi tetap mode lokal satu pengguna (semua uji lama bergantung ini).
+- Mode cloud: tanpa data contoh siswa; tombol/fungsi siswa, kelas, periode hanya admin (`data-admin-only`, guard di `saveStudent/deleteStudent/importStudentsCSV/saveClass/deleteClass`); layar admin untuk undangan guru dan peran; sembunyikan kolom koneksi AI (panggil `AIService.use({cloud})`).
+- Koneksi pertama: bila ada data lokal lama, konfirmasi unggah (`enqueueAll`: admin semua, guru hanya data milik guru). Ganti akun di perangkat yang sama: hapus data lokal (`Store.wipe`) setelah peringatan; keluar menunggu antrean kosong.
+- Uji browser dengan adaptor Supabase tiruan (`window.RemoteAdapter`), `supabase/PANDUAN.md` (setup, Google OAuth, sekolah dan admin pertama, daftar uji RLS dua akun).
+- Keterbatasan: tanpa realtime (polling 60 dtk + saat fokus/online); ID siswa data lokal lama guru tidak otomatis cocok dengan siswa sekolah (migrasi awal dilakukan admin).
+
+## 8b. Rencana hibrida: Supabase + Spreadsheet (belum dikerjakan)
+
+- Supabase: sumber kebenaran semua data, login, RLS, dan **Storage** untuk file (foto guru/siswa, lampiran). Bucket privat + policy per sekolah/pemilik, tampil lewat signed URL.
+- Spreadsheet: **pencatatan satu arah** (Supabase -> Sheet): rekap nilai, daftar hadir, jurnal, dan data yang ingin dilihat guru/kepala sekolah dalam bentuk lembar. Tidak dibaca balik, supaya tidak ada dua sumber kebenaran. Ditulis dari server (fungsi Vercel dengan service account Google atau Apps Script), bukan dari browser; ekspor per tombol/terjadwal dalam batch (batas kuota Sheets API).
 
 ## 9. Keterbatasan dan catatan yang diketahui
 

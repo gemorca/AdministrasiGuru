@@ -37,6 +37,83 @@
 </head>
 <body class="text-slate-800 flex h-screen overflow-hidden bg-slate-50">
 
+    <!-- GERBANG LOGIN & KONEKSI AWAL CLOUD (TAHAP 7 - Tersembunyi pada mode lokal) -->
+    <div id="authGate" class="fixed inset-0 bg-slate-900 z-[80] hidden flex items-center justify-center p-4 no-print">
+        <div class="bg-white rounded-2xl p-6 sm:p-8 w-full max-w-md shadow-2xl border border-slate-100 space-y-5">
+            <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
+                <div class="bg-blue-600 text-white p-3 rounded-xl text-2xl shadow">👨‍🏫</div>
+                <div>
+                    <h1 class="font-bold text-lg text-slate-800 leading-tight">Sistem Administrasi Guru</h1>
+                    <p class="text-xs text-slate-500 font-medium">Ruang Kerja Terpadu Sekolah</p>
+                </div>
+            </div>
+
+            <!-- Panel: Memuat -->
+            <div id="authPanelLoading" class="py-6 text-center space-y-3">
+                <div class="text-3xl animate-pulse">🔄</div>
+                <p id="authLoadingText" class="text-sm font-semibold text-slate-700">Menghubungkan ke server sekolah...</p>
+            </div>
+
+            <!-- Panel: Masuk dengan Google -->
+            <div id="authPanelLogin" class="hidden space-y-4">
+                <p class="text-sm text-slate-600 leading-relaxed">Silakan masuk menggunakan akun Google yang telah diundang oleh Admin Sekolah Anda.</p>
+                <div id="authLoginError" class="hidden text-xs bg-red-50 text-red-700 border border-red-200 rounded-xl p-3"></div>
+                <button type="button" id="btnGoogleLogin" onclick="Auth.loginGoogle()" class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm shadow transition flex items-center justify-center gap-2">
+                    <span>🔐</span> Masuk dengan Google
+                </button>
+                <p class="text-[11px] text-slate-400 text-center">Hanya guru yang terdaftar pada daftar undangan sekolah yang dapat mengakses data.</p>
+            </div>
+
+            <!-- Panel: Ditolak (Belum Diundang) -->
+            <div id="authPanelDenied" class="hidden space-y-4">
+                <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2 text-xs text-amber-900">
+                    <p class="font-bold text-sm">🔒 Akun Belum Diundang</p>
+                    <p>Email <b id="authDeniedEmail" class="underline"></b> belum terdaftar di sekolah ini.</p>
+                    <p>Minta <b>Admin Sekolah</b> menambahkan alamat email tersebut melalui menu <b>Pengaturan &gt; Tim &amp; Undangan Guru</b>, lalu tekan Coba Lagi.</p>
+                </div>
+                <div class="flex gap-2">
+                    <button type="button" id="btnRetryGate" onclick="Auth.retryGate()" class="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold shadow hover:bg-blue-700 transition">Coba Lagi</button>
+                    <button type="button" id="btnDeniedLogout" onclick="Auth.signOutFromGate()" class="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200 transition">Ganti Akun</button>
+                </div>
+            </div>
+
+            <!-- Panel: Peringatan Ganti Akun di Perangkat yang Sama -->
+            <div id="authPanelSwitch" class="hidden space-y-4">
+                <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2 text-xs text-amber-900">
+                    <p class="font-bold text-sm">⚠️ Pergantian Akun di Perangkat Ini</p>
+                    <p>Browser ini sebelumnya dipakai oleh <b id="authSwitchPrevEmail"></b>. Anda sekarang masuk sebagai <b id="authSwitchNextEmail"></b>.</p>
+                    <p>Untuk menjaga privasi antar guru, salinan data lokal akun sebelumnya di browser ini akan dihapus sebelum memuat data akun Anda (data akun sebelumnya yang sudah tersinkron di server tetap aman).</p>
+                </div>
+                <div class="flex gap-2">
+                    <button type="button" id="btnCancelSwitch" onclick="Auth.chooseDecision('cancel')" class="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200 transition">Batal &amp; Keluar</button>
+                    <button type="button" id="btnConfirmSwitch" onclick="Auth.chooseDecision('wipe_and_continue')" class="flex-1 py-2.5 bg-red-600 text-white rounded-xl text-xs font-bold shadow hover:bg-red-700 transition">Bersihkan &amp; Lanjut</button>
+                </div>
+            </div>
+
+            <!-- Panel: Konfirmasi Unggah Data Lokal Lama (Koneksi Pertama) -->
+            <div id="authPanelFirstSync" class="hidden space-y-4">
+                <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2 text-xs text-blue-900">
+                    <p class="font-bold text-sm">☁️ Data Lokal Ditemukan</p>
+                    <p id="authFirstSyncDesc"></p>
+                </div>
+                <div class="space-y-2">
+                    <button type="button" id="btnUploadLocal" onclick="Auth.chooseDecision('upload')" class="w-full py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold shadow hover:bg-blue-700 transition">Unggah Data Lokal ke Akun Sekolah</button>
+                    <button type="button" id="btnSkipLocal" onclick="Auth.chooseDecision('skip')" class="w-full py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200 transition">Jangan Unggah (Pakai Data Server Saja)</button>
+                    <button type="button" onclick="Auth.chooseDecision('cancel')" class="w-full py-2 text-slate-400 hover:text-slate-600 text-xs font-semibold">Batal &amp; Keluar</button>
+                </div>
+            </div>
+
+            <!-- Panel: Galat Koneksi Awal -->
+            <div id="authPanelError" class="hidden space-y-4">
+                <div class="bg-red-50 border border-red-200 rounded-xl p-4 text-xs text-red-700 space-y-1">
+                    <p class="font-bold">Gagal Terhubung</p>
+                    <p id="authErrorText"></p>
+                </div>
+                <button type="button" onclick="Auth.retryGate()" class="w-full py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold shadow hover:bg-blue-700 transition">Coba Lagi</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL CUSTOM NOTIFICATION -->
     <div id="customModal" class="fixed inset-0 bg-slate-900/60 z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4 shadow-2xl border border-slate-100 text-center">
@@ -343,6 +420,11 @@
                     </select>
                 </div>
                 <div id="archiveBanner" class="hidden bg-amber-100 text-amber-800 text-xs px-3 py-1 rounded-full font-bold border border-amber-300">🔒 Arsip</div>
+                <div id="cloudHeaderBar" class="hidden flex items-center gap-2 no-print">
+                    <span id="cloudRoleBadge" class="text-[10px] font-bold px-2.5 py-1 rounded-full border bg-slate-100 text-slate-700 border-slate-200">Guru</span>
+                    <button type="button" id="syncStatusBadge" onclick="Auth.manualSync()" class="text-[11px] font-bold px-2.5 py-1 rounded-xl border bg-emerald-50 text-emerald-700 border-emerald-200 cursor-pointer">☁️ Tersinkron</button>
+                    <button type="button" id="btnCloudLogout" onclick="Auth.logout()" class="text-xs font-bold px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-red-50 text-slate-700 hover:text-red-600 border border-slate-200 transition" title="Keluar dari akun">Keluar</button>
+                </div>
                 <div class="text-right hidden sm:block">
                     <p id="headerTeacher" class="text-sm font-bold text-slate-700 leading-none">Guru Mapel</p>
                     <span id="headerActivePeriod" class="text-[10px] font-bold text-white bg-blue-600 px-2.5 py-0.5 rounded-full mt-1 inline-block shadow-sm">Periode</span>
@@ -428,12 +510,13 @@
                     </div>
                     <div class="flex flex-wrap gap-2">
                         <button onclick="exportStudentsCSV()" class="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-sm font-bold shadow hover:bg-emerald-700 transition flex items-center gap-1.5">📥 Export CSV</button>
-                        <label class="bg-amber-600 text-white px-3.5 py-2 rounded-xl text-sm font-bold shadow hover:bg-amber-700 transition flex items-center gap-1.5 cursor-pointer">
+                        <label data-admin-only class="bg-amber-600 text-white px-3.5 py-2 rounded-xl text-sm font-bold shadow hover:bg-amber-700 transition flex items-center gap-1.5 cursor-pointer">
                             📤 Import CSV <input type="file" id="importCsvFile" accept=".csv" class="hidden" onchange="importStudentsCSV(event)">
                         </label>
-                        <button onclick="openModalStudent()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition">+ Tambah Siswa</button>
+                        <button data-admin-only onclick="openModalStudent()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition">+ Tambah Siswa</button>
                     </div>
                 </div>
+                <div id="studentReadonlyNote" class="hidden bg-slate-100 border border-slate-200 text-slate-600 rounded-xl px-4 py-2.5 text-xs no-print">🔒 Daftar peserta didik dikelola terpusat oleh Admin Sekolah agar seragam bagi seluruh guru mata pelajaran.</div>
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
                     <div class="p-4 border-b bg-slate-50/70 flex flex-col sm:flex-row justify-between gap-3">
                         <input type="text" id="searchStudent" placeholder="🔍 Cari nama atau NISN..." class="w-full sm:w-80 px-3.5 py-2 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" oninput="renderStudents()">
@@ -472,8 +555,9 @@
                         <h3 class="text-2xl font-bold text-slate-800">Manajemen Kelas</h3>
                         <p class="text-slate-500 text-sm">Kelola daftar rombongan belajar dalam periode aktif.</p>
                     </div>
-                    <button onclick="openModalClass()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition">+ Tambah Kelas</button>
+                    <button data-admin-only onclick="openModalClass()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow hover:bg-blue-700 transition">+ Tambah Kelas</button>
                 </div>
+                <div id="classReadonlyNote" class="hidden bg-slate-100 border border-slate-200 text-slate-600 rounded-xl px-4 py-2.5 text-xs no-print">🔒 Daftar kelas/rombel dikelola oleh Admin Sekolah. Gunakan tombol <b>Pilih Aktif</b> untuk berpindah kelas mengajar.</div>
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden p-6">
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm text-left">
@@ -1601,6 +1685,7 @@
                 </div>
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4 max-w-2xl">
                     <h4 class="font-bold border-b pb-2 text-slate-700">Identitas Sekolah & Guru</h4>
+                    <div id="settingsReadonlyNote" class="hidden bg-slate-50 border border-slate-200 text-slate-600 rounded-xl p-3 text-xs">🔒 Identitas sekolah dan periode aktif diatur oleh <b>Admin Sekolah</b>. Anda tetap dapat mengatur <b>Mata Pelajaran</b>, <b>Nama Guru</b>, dan <b>NIP Guru</b> Anda.</div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div><label class="block text-xs font-bold text-slate-700 mb-1">Nama Sekolah</label><input type="text" id="setSchool" class="w-full border border-slate-200 px-3.5 py-2 rounded-xl text-sm"></div>
                         <div>
@@ -1720,6 +1805,38 @@
                         <button onclick="AIUI.save()" class="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow hover:bg-blue-700 transition">Simpan Pengaturan AI</button>
                         <button id="aiTestBtn" onclick="AIUI.test()" class="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow hover:bg-emerald-700 transition">Uji Koneksi</button>
                         <button id="aiClearBtn" onclick="AIUI.clearSecret()" class="bg-red-50 text-red-600 border border-red-200 px-5 py-2.5 rounded-xl font-bold text-sm">Hapus Kunci</button>
+                    </div>
+                </div>
+
+                <!-- MANAJEMEN TIM & UNDANGAN GURU (Hanya tampil pada Mode Cloud untuk Admin Sekolah) -->
+                <div id="adminTeamCard" data-admin-only class="hidden bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4 max-w-3xl mt-6">
+                    <div class="border-b pb-2 flex items-center justify-between gap-2 flex-wrap">
+                        <div>
+                            <h4 class="font-bold text-slate-800">👥 Tim &amp; Undangan Guru Sekolah</h4>
+                            <p class="text-xs text-slate-500">Tambahkan email akun Google guru agar dapat masuk dan berbagi daftar kelas serta siswa sekolah.</p>
+                        </div>
+                        <button type="button" onclick="Auth.loadAdminTeam()" class="text-xs font-bold text-blue-600 hover:text-blue-800 px-3 py-1.5 rounded-lg bg-blue-50">Muat Ulang</button>
+                    </div>
+
+                    <form id="formInviteTeacher" onsubmit="Auth.inviteTeacher(event)" class="flex flex-col sm:flex-row gap-2">
+                        <input type="email" id="inviteEmail" placeholder="Email Google guru (contoh: budi@gmail.com)" class="flex-1 border border-slate-200 px-3.5 py-2 rounded-xl text-sm" required>
+                        <select id="inviteRole" class="border border-slate-200 px-3 py-2 rounded-xl text-sm font-semibold">
+                            <option value="teacher">Guru Mapel</option>
+                            <option value="admin">Admin Sekolah</option>
+                        </select>
+                        <button type="submit" id="btnInviteTeacher" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold shadow transition">+ Undang Guru</button>
+                    </form>
+
+                    <div id="adminTeamMsg" class="hidden"></div>
+
+                    <div class="space-y-2">
+                        <h5 class="text-xs font-bold uppercase tracking-wider text-slate-500">Undangan Menunggu Klaim</h5>
+                        <div id="adminInviteList" class="space-y-2"></div>
+                    </div>
+
+                    <div class="space-y-2 pt-2 border-t border-slate-100">
+                        <h5 class="text-xs font-bold uppercase tracking-wider text-slate-500">Anggota Aktif Sekolah</h5>
+                        <div id="adminMemberList" class="space-y-2"></div>
                     </div>
                 </div>
             </div>
@@ -2217,6 +2334,9 @@
     <script src="js/domain/grading.js"></script>
     <script src="js/domain/backup.js"></script>
     <script src="js/domain/package.js"></script>
+    <script src="js/domain/sync.js"></script>
+    <script src="js/core/sync.js"></script>
+    <script src="js/core/remote-supabase.js"></script>
     <script src="js/ai/schema.js"></script>
     <script src="js/ai/anonymizer.js"></script>
     <script src="js/ai/prompts.js"></script>
@@ -2249,6 +2369,7 @@
     <script src="js/modules/settings.js"></script>
     <script src="js/modules/documents.js"></script>
     <script src="js/modules/daily-test.js"></script>
+    <script src="js/app/auth.js"></script>
     <script src="js/app/app.js"></script>
     <script src="js/app/boot.js"></script>
 </body>

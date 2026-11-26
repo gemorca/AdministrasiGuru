@@ -66,23 +66,36 @@
                     : `${info} Mode GABUNG: record baru ditambahkan; record yang sama diganti hanya bila di berkas lebih baru. Data saat ini tidak dihapus. Lanjutkan?`;
                 showConfirm(ask, () => {
                     let note = '';
+                    const lockSchoolTables = typeof Cloud !== 'undefined' && Cloud.enabled && !Cloud.isAdmin();
+                    let keep = backupTables();
                     if (mode === 'timpa') {
                         backupJSON(true);
-                        let keep = backupTables();
-                        if (!incoming.periods.length) incoming.periods = keep.periods;
-                        if (!incoming.classes.length) incoming.classes = keep.classes;
+                        if (lockSchoolTables) {
+                            incoming.periods = keep.periods;
+                            incoming.classes = keep.classes;
+                            incoming.students = keep.students;
+                        } else {
+                            if (!incoming.periods.length) incoming.periods = keep.periods;
+                            if (!incoming.classes.length) incoming.classes = keep.classes;
+                        }
                         applyBackupTables(incoming);
                         let lastBackupAt = settings.lastBackupAt;
                         settings = { ...DEFAULT_SETTINGS, ...(r.data.settings || {}), ai: settings.ai, lastBackupAt };
+                        if (lockSchoolTables && typeof syncSchoolFieldsFromPeriod === 'function') syncSchoolFieldsFromPeriod();
                         note = `${total} record dipulihkan (timpa).`;
                     } else {
-                        let m = Backup.merge(backupTables(), incoming);
+                        if (lockSchoolTables) {
+                            incoming.periods = [];
+                            incoming.classes = [];
+                            incoming.students = [];
+                        }
+                        let m = Backup.merge(keep, incoming);
                         applyBackupTables(m.tables);
                         periods.forEach(p => { p.isActive = p.id === activePeriodId; });
                         note = `Gabung selesai: ${m.stats.added} ditambah, ${m.stats.updated} diperbarui, ${m.stats.kept} tidak berubah.`;
                     }
-                    if (!periods.some(p => p.id === activePeriodId)) { let a = periods.find(p => p.isActive) || periods[0]; activePeriodId = a.id; a.isActive = true; }
-                    if (!classes.some(c => c.classId === activeClassId)) { let c = classes.find(x => x.periodId === activePeriodId) || classes[0]; activeClassId = c.classId; }
+                    if (periods.length && !periods.some(p => p.id === activePeriodId)) { let a = periods.find(p => p.isActive) || periods[0]; activePeriodId = a.id; a.isActive = true; }
+                    if (classes.length && !classes.some(c => c.classId === activeClassId)) { let c = classes.find(x => x.periodId === activePeriodId) || classes[0]; activeClassId = c.classId; }
                     saveAllData();
                     loadActiveContextData();
                     updateHeader();

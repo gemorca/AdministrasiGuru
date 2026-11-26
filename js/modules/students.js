@@ -1,10 +1,19 @@
 // js/modules/students.js
 // Dipecah dari sistem_administrasi_guru.html (Tahap 0). Skrip klasik: fungsi bersifat global.
+        function requireAdminStudentAction() {
+            if (typeof Cloud !== 'undefined' && !Cloud.isAdmin()) {
+                showModal("Akses Dibatasi", "Data peserta didik merupakan data sekolah yang dikelola oleh Admin Sekolah.", "🔒");
+                return false;
+            }
+            return true;
+        }
+
         function renderStudents() {
             let q = document.getElementById('searchStudent').value.toLowerCase();
             let tbody = document.getElementById('studentTableBody');
             let filtered = students.filter(s => s.name.toLowerCase().includes(q) || s.nis.includes(q));
             if (!tbody) return;
+            const hideAct = (typeof Cloud !== 'undefined' && !Cloud.isAdmin()) ? 'hidden' : '';
             tbody.innerHTML = filtered.length ? filtered.map((s, idx) => `
                 <tr class="hover:bg-slate-50 transition">
                     <td class="px-4 py-3 text-slate-500 font-medium">${idx + 1}</td>
@@ -13,7 +22,7 @@
                     <td class="px-4 py-3"><span class="px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-700">${esc(s.gender)}</span></td>
                     <td class="px-4 py-3 font-medium text-slate-600">${esc(s.class)}</td>
                     <td class="px-4 py-3 text-center no-print">
-                        <div class="flex justify-center gap-1">
+                        <div data-admin-only class="flex justify-center gap-1 ${hideAct}">
                             <button onclick="openModalStudent('${s.id}')" class="text-blue-600 hover:text-blue-800 font-bold text-xs bg-blue-50 px-2.5 py-1 rounded-lg transition-colors" title="Edit Data">✏️</button>
                             <button onclick="deleteStudent('${s.id}')" class="text-red-600 hover:text-red-800 font-bold text-xs bg-red-50 px-2.5 py-1 rounded-lg transition-colors" title="Hapus Data">🗑️</button>
                         </div>
@@ -23,6 +32,7 @@
         }
 
         function openModalStudent(id = null) {
+            if (!requireAdminStudentAction()) return;
             let form = document.getElementById('formStudent');
             if(form) form.reset();
             let elId = document.getElementById('stId');
@@ -44,7 +54,8 @@
         }
 
         function saveStudent(e) {
-            e.preventDefault();
+            if (e) e.preventDefault();
+            if (!requireAdminStudentAction()) return;
             let elId = document.getElementById('stId');
             let id = (elId && elId.value) ? elId.value : genId('STU');
             let nis = document.getElementById('stNis').value.trim();
@@ -72,6 +83,7 @@
         }
 
         function deleteStudent(id) {
+            if (!requireAdminStudentAction()) return;
             showConfirm("Apakah Anda yakin ingin menghapus peserta didik ini?" + Integrity.describe(Integrity.studentDeps(id)), () => {
                 Integrity.cascadeStudent(id);
                 saveAllData();
@@ -92,6 +104,7 @@
         }
 
         function importStudentsCSV(e) {
+            if (!requireAdminStudentAction()) { if (e && e.target) e.target.value = ''; return; }
             let file = e.target.files[0];
             if (!file) return;
             let reader = new FileReader();

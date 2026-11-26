@@ -1,6 +1,7 @@
 // js/app/app.js
 // Dipecah dari sistem_administrasi_guru.html (Tahap 0). Skrip klasik: fungsi bersifat global.
         function initApp() {
+            const isCloud = typeof Cloud !== 'undefined' && Cloud.enabled;
             Store.migrate();
             settings = { ...DEFAULT_SETTINGS, ...Store.read('g_set', {}) };
             settings.ai = { ...DEFAULT_SETTINGS.ai, ...(settings.ai || {}) };
@@ -8,23 +9,69 @@
 
             if (periods.length === 0) {
                 activePeriodId = 'PER-2026-2027-GENAP';
-                periods.push({ id: activePeriodId, year: '2026/2027', semester: 'GENAP', isActive: true });
-                Store.write('g_per', periods);
+                const initPer = { id: activePeriodId, year: '2026/2027', semester: 'GENAP', isActive: true };
+                if (isCloud && Cloud.school && Cloud.school.name) initPer.school = Cloud.school.name;
+                periods.push(initPer);
+                if (!isCloud || Cloud.isAdmin()) {
+                    Store.write('g_per', periods);
+                }
             } else {
                 let active = periods.find(p => p.isActive) || periods[0];
                 activePeriodId = active.id;
                 active.isActive = true;
             }
 
+            syncSchoolFieldsFromPeriod();
+
             classes = Store.read('g_cls', []);
             if (classes.length === 0) {
-                classes.push({ classId: 'CLS-VII1', periodId: activePeriodId, className: 'VII.1', gradeLevel: 'VII', phase: 'D', status: 'active' });
-                classes.push({ classId: 'CLS-VII2', periodId: activePeriodId, className: 'VII.2', gradeLevel: 'VII', phase: 'D', status: 'active' });
-                Store.write('g_cls', classes);
+                if (!isCloud) {
+                    classes.push({ classId: 'CLS-VII1', periodId: activePeriodId, className: 'VII.1', gradeLevel: 'VII', phase: 'D', status: 'active' });
+                    classes.push({ classId: 'CLS-VII2', periodId: activePeriodId, className: 'VII.2', gradeLevel: 'VII', phase: 'D', status: 'active' });
+                    Store.write('g_cls', classes);
+                } else if (Cloud.isAdmin()) {
+                    classes.push({ classId: 'CLS-VII1', periodId: activePeriodId, className: 'VII.1', gradeLevel: 'VII', phase: 'D', status: 'active' });
+                    Store.write('g_cls', classes);
+                }
             }
 
-            activeClassId = classes[0].classId;
+            activeClassId = classes[0] ? classes[0].classId : null;
 
+            readAllCollectionsFromStore();
+
+            // Mode lokal memakai 2 siswa contoh bila kosong; mode cloud TIDAK membuat siswa contoh.
+            if (!isCloud && allStudents.length === 0 && activeClassId) {
+                allStudents.push({ id: 'STU-1', periodId: activePeriodId, classId: activeClassId, nis: '1001', name: 'Ahmad Fauzan', gender: 'L', class: 'VII.1' });
+                allStudents.push({ id: 'STU-2', periodId: activePeriodId, classId: activeClassId, nis: '1002', name: 'Siti Aminah', gender: 'P', class: 'VII.1' });
+                Store.write('g_stu', allStudents);
+            }
+
+            if (isCloud && Cloud.user && Cloud.user.name && settings.teacher === DEFAULT_SETTINGS.teacher) {
+                settings.teacher = Cloud.user.name;
+            }
+
+            loadActiveContextData();
+            buildNav();
+            updateHeader();
+            switchView('dashboard');
+        }
+
+        function syncSchoolFieldsFromPeriod() {
+            if (typeof Cloud === 'undefined' || !Cloud.enabled) return;
+            const active = periods.find(p => p.id === activePeriodId) || periods[0];
+            if (active) {
+                if (active.year) settings.academicYear = active.year;
+                if (active.semester) settings.semester = active.semester;
+                if (active.school) settings.school = active.school;
+                else if (Cloud.school && Cloud.school.name) settings.school = Cloud.school.name;
+                if (active.principal) settings.principal = active.principal;
+                if (active.nipPrincipal) settings.nipPrincipal = active.nipPrincipal;
+            } else if (Cloud.school && Cloud.school.name) {
+                settings.school = Cloud.school.name;
+            }
+        }
+
+        function readAllCollectionsFromStore() {
             allStudents = Store.read('g_stu', []);
             allMeetings = Store.read('g_mtg', []);
             allAttendance = Store.read('g_att', []);
@@ -47,17 +94,32 @@
             allDocuments = Store.read('g_docs', []); // Tahap 20
             allDailyTests = Store.read('g_dt', []);
             allDailyScores = Store.read('g_dts', []);
+        }
 
-            if (allStudents.length === 0) {
-                allStudents.push({ id: 'STU-1', periodId: activePeriodId, classId: activeClassId, nis: '1001', name: 'Ahmad Fauzan', gender: 'L', class: 'VII.1' });
-                allStudents.push({ id: 'STU-2', periodId: activePeriodId, classId: activeClassId, nis: '1002', name: 'Siti Aminah', gender: 'P', class: 'VII.1' });
-                Store.write('g_stu', allStudents);
+        function reloadStateFromStore(opts = {}) {
+            settings = { ...DEFAULT_SETTINGS, ...Store.read('g_set', {}) };
+            settings.ai = { ...DEFAULT_SETTINGS.ai, ...(settings.ai || {}) };
+            const pulledPeriods = Store.read('g_per', []);
+            if (pulledPeriods.length > 0) {
+                periods = pulledPeriods;
+                if (!periods.some(p => p.id === activePeriodId)) {
+                    const active = periods.find(p => p.isActive) || periods[0];
+                    activePeriodId = active.id;
+                }
             }
-
+            syncSchoolFieldsFromPeriod();
+            classes = Store.read('g_cls', []);
+            if (!classes.some(c => c.classId === activeClassId)) {
+                activeClassId = classes[0] ? classes[0].classId : null;
+            }
+            readAllCollectionsFromStore();
             loadActiveContextData();
-            buildNav();
             updateHeader();
-            switchView('dashboard');
+            const anyModalOpen = opts.preserveOpenModal && Array.from(document.querySelectorAll('[id^="modal"]')).some(m => !m.classList.contains('hidden'));
+            if (!anyModalOpen) {
+                const activeSec = document.querySelector('.view-section.active');
+                if (activeSec) switchView(activeSec.id.replace('view-', ''));
+            }
         }
 
         function loadActiveContextData() {
@@ -91,10 +153,13 @@
         }
 
         function saveAllData() {
+            const isCloud = typeof Cloud !== 'undefined' && Cloud.enabled;
             Store.write('g_set', settings);
-            Store.write('g_per', periods);
-            Store.write('g_cls', classes);
-            Store.write('g_stu', allStudents);
+            if (!isCloud || Cloud.isAdmin()) {
+                Store.write('g_per', periods);
+                Store.write('g_cls', classes);
+                Store.write('g_stu', allStudents);
+            }
             Store.write('g_mtg', allMeetings);
             Store.write('g_att', allAttendance);
             Store.write('g_ass', allAssessments);
@@ -172,8 +237,11 @@
 
             let sel = document.getElementById('globalClassSelector');
             if (sel) {
-                sel.innerHTML = classes.map(c => `<option value="${c.classId}" ${c.classId === activeClassId ? 'selected' : ''}>Kelas ${esc(c.className)}</option>`).join('');
+                sel.innerHTML = classes.length
+                    ? classes.map(c => `<option value="${c.classId}" ${c.classId === activeClassId ? 'selected' : ''}>Kelas ${esc(c.className)}</option>`).join('')
+                    : '<option value="">Belum ada kelas</option>';
             }
+            if (typeof Auth !== 'undefined') Auth.renderHeader();
         }
 
         function changeGlobalClass(cId) {

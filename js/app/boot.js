@@ -1,11 +1,17 @@
 /**
  * Titik masuk aplikasi.
  * Menyiapkan penyimpanan (IndexedDB atau localStorage), menghubungkan galat penyimpanan ke modal,
- * menjalankan initApp, lalu memeriksa kuota.
+ * menjalankan gerbang login cloud (bila APP_CONFIG.supabaseUrl diatur) ATAU langsung initApp untuk mode lokal.
  */
 window.onload = async function () {
     Store.onError = function (msg) { showModal('Peringatan Penyimpanan', msg, '\u26A0\uFE0F'); };
     const info = await Store.init({ mode: (window.APP_CONFIG && window.APP_CONFIG.storage) || 'indexeddb' });
+
+    if (typeof Auth !== 'undefined' && Auth.isCloudConfigured()) {
+        await Auth.boot();
+        return;
+    }
+
     initApp();
     AIUI.init();
     AIUI.applyVisibility();

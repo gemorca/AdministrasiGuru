@@ -1,17 +1,19 @@
 /**
  * Konfigurasi bersama untuk seluruh guru (diisi admin sekolah, sekali saja).
  *
- * Jika proxyUrl DAN token diisi, guru tidak perlu mengisi URL atau token di Pengaturan AI.
- * Guru cukup mengaktifkan AI dan menyetujui pemberitahuan privasi.
+ * Mode 1 - Multi-Guru Cloud (Tahap 7, disarankan untuk satu sekolah di Vercel + Supabase):
+ *   Isi `supabaseUrl` dan `supabaseAnonKey` di bawah (serta env Vercel: GEMINI_API_KEY, SUPABASE_URL,
+ *   SUPABASE_ANON_KEY, AI_DAILY_LIMIT). Bila `supabaseUrl` diisi:
+ *     - Aplikasi mewajibkan Login Google dan memeriksa undangan guru di sekolah.
+ *     - AI otomatis lewat `/api/gemini` di Vercel (tidak ada lagi token/rahasia di browser).
  *
- * PERINGATAN KEAMANAN: berkas ini ikut terkirim ke browser. Token terlihat oleh siapa pun yang dapat
- * membuka situs. Batasi risikonya:
- *   - atur DAILY_LIMIT di Script Properties Apps Script,
- *   - ganti APP_TOKEN (lalu berkas ini) bila diduga bocor,
- *   - jangan menaruh API key Gemini di sini (hanya token proxy),
- *   - login Google (Tahap 7) akan menggantikan token ini sepenuhnya.
+ * Mode 2 - Lokal Satu Pengguna (tanpa `supabaseUrl`):
+ *   Data tersimpan di browser perangkat masing-masing, dan AI memakai proxy Apps Script di bawah.
  */
 window.APP_CONFIG = window.APP_CONFIG || {
+    // Aktifkan mode Cloud Multi-Guru dengan mengisi dua baris berikut (lihat supabase/PANDUAN.md):
+    // supabaseUrl: 'https://NAMA-PROYEK.supabase.co',
+    // supabaseAnonKey: 'eyJ...',
     ai: {
         proxyUrl: 'https://script.google.com/macros/s/AKfycbzAgFnBR9o3l3bEQuz4iATRi9vPZxNNb1jH1idm3IeWkOTwBragJU_iYVD6L1hJMdae/exec',                  // URL Web App Apps Script, berakhiran /exec
         token: 'mohamadagilnurekaputrasabdul2026',                     // sama dengan APP_TOKEN di Script Properties

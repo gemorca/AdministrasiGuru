@@ -43,6 +43,7 @@ const AIService = (() => {
         online: () => (typeof navigator === 'undefined' || navigator.onLine !== false),
         config: () => (typeof settings !== 'undefined' && settings.ai) ? settings.ai : {},
         secret: () => (typeof Store !== 'undefined' && Store.secretGet) ? Store.secretGet() : '',
+        cloud: () => null,
         usageGet: () => { try { return JSON.parse(localStorage.getItem(USAGE_KEY) || 'null'); } catch (_) { return null; } },
         usageSet: v => { try { localStorage.setItem(USAGE_KEY, JSON.stringify(v)); } catch (_) {} },
         today: () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; },
@@ -76,13 +77,25 @@ const AIService = (() => {
         NETWORK: 'Gagal terhubung ke layanan AI. Periksa koneksi internet lalu coba lagi.',
         PROXY_TIMEOUT: 'Proxy Apps Script tidak menjawab dalam 20 detik. Periksa: URL Web App benar (berakhiran /exec), deploy "Siapa saja" (Anyone), dan buka tab Executions di Apps Script untuk melihat apakah permintaan masuk.',
         PROXY_OLD: 'Proxy Apps Script masih memakai kode lama. Tempel ulang isi apps-script/Code.gs, lalu Deploy > Manage deployments > Edit > Version: New version > Deploy.',
-        PROXY_UNREACHABLE: 'URL Web App tidak dapat dijangkau dari browser. Penyebab umum: deploy belum "Siapa saja" (Anyone), URL salah, atau salinan URL dari tab Test deployment (harus URL Web app berakhiran /exec).'
+        PROXY_UNREACHABLE: 'URL Web App tidak dapat dijangkau dari browser. Penyebab umum: deploy belum "Siapa saja" (Anyone), URL salah, atau salinan URL dari tab Test deployment (harus URL Web app berakhiran /exec).',
+        CLOUD_AUTH: 'Sesi masuk Anda berakhir atau akun belum terdaftar sebagai anggota sekolah. Silakan keluar lalu masuk kembali.',
+        CLOUD_LIMIT: 'Batas penggunaan AI harian Anda di sekolah telah tercapai. Silakan lanjutkan besok atau hubungi Admin Sekolah.',
+        CLOUD_CONFIG: 'Layanan AI sekolah di server belum dikonfigurasi dengan lengkap (env Vercel/Supabase). Hubungi Admin Sekolah.'
     };
     function err(code, extra) { return new AIError(code, (extra && extra.message) || MESSAGES[code] || code, extra); }
 
     // ---------- status & konfigurasi ----------
     function status() {
         const c = deps.config() || {};
+        const cl = deps.cloud ? deps.cloud() : null;
+        if (cl) {
+            const configured = !!(cl.endpoint || '/api/gemini');
+            return {
+                enabled: !!c.enabled, configured, hasSecret: true, mode: 'cloud',
+                model: c.model || DEFAULT_MODEL, privacyAck: !!c.privacyAckAt,
+                ready: !!c.enabled && configured && !!c.privacyAckAt
+            };
+        }
         const sec = deps.secret();
         const mode = c.mode === 'direct' ? 'direct' : 'proxy';
         const configured = !!sec && (mode === 'direct' || !!c.proxyUrl);
@@ -172,8 +185,36 @@ const AIService = (() => {
         return err('BAD_REQUEST', { status, message: `Galat tak terduga (kode ${status}). ${msg}` });
     }
 
+    function mapCloudEnvelope(env) {
+        if (!env || typeof env !== 'object') throw err('CLOUD_CONFIG');
+        if (env.cloudError === 'AUTH') throw err('CLOUD_AUTH');
+        if (env.cloudError === 'LIMIT') throw err('CLOUD_LIMIT');
+        if (env.cloudError === 'CONFIG') throw err('CLOUD_CONFIG');
+        if (env.cloudError) throw err('CLOUD_CONFIG', { message: MESSAGES.CLOUD_CONFIG + ' (' + env.cloudError + ')' });
+        return env;
+    }
+
+    async function cloudToken(cl) {
+        const tok = cl && (typeof cl.getToken === 'function' ? await cl.getToken() : cl.token);
+        if (!tok) throw err('CLOUD_AUTH');
+        return tok;
+    }
+
     async function rawSend(body, cfg, secret, signal) {
         const model = cfg.model || DEFAULT_MODEL;
+        const cl = deps.cloud ? deps.cloud() : null;
+        if (cl) {
+            const jwt = await cloudToken(cl);
+            const res = await deps.fetch(cl.endpoint || '/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + jwt },
+                body: JSON.stringify({ model, request: body }), signal
+            });
+            let env = null;
+            try { env = await res.json(); } catch (_) { throw err('CLOUD_CONFIG'); }
+            mapCloudEnvelope(env);
+            return { status: env.status, json: env.data };
+        }
         if ((cfg.mode || 'proxy') === 'direct') {
             const res = await deps.fetch(GEMINI_BASE + encodeURIComponent(model) + ':generateContent', {
                 method: 'POST',
@@ -352,7 +393,19 @@ const AIService = (() => {
             const timer = setTimeout(() => ctl.abort('timeout'), 20000);
             let json;
             try {
-                if (st.mode === 'direct') {
+                if (st.mode === 'cloud') {
+                    const cl = deps.cloud();
+                    const jwt = await cloudToken(cl);
+                    const res = await deps.fetch((cl && cl.endpoint) || '/api/gemini', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + jwt },
+                        body: JSON.stringify({ op: 'models', pageToken }), signal: ctl.signal
+                    });
+                    let env = null; try { env = await res.json(); } catch (_) { throw err('CLOUD_CONFIG'); }
+                    mapCloudEnvelope(env);
+                    if (env.status < 200 || env.status >= 300) throw mapHttpError(env.status, env.data);
+                    json = env.data;
+                } else if (st.mode === 'direct') {
                     const url = GEMINI_LIST + '?pageSize=200' + (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : '');
                     const res = await deps.fetch(url, { method: 'GET', headers: { 'x-goog-api-key': secret }, signal: ctl.signal });
                     let j = null; try { j = await res.json(); } catch (_) {}
@@ -413,8 +466,34 @@ const AIService = (() => {
         return deps.now() - t0;
     }
 
+    async function pingCloud(signal) {
+        const cl = deps.cloud ? deps.cloud() : null;
+        const jwt = await cloudToken(cl);
+        const t0 = deps.now();
+        const ctl = new AbortController();
+        const onAbort = () => ctl.abort('user');
+        if (signal) { if (signal.aborted) throw err('ABORTED'); signal.addEventListener('abort', onAbort, { once: true }); }
+        const timer = setTimeout(() => ctl.abort('timeout'), deps.proxyPingMs);
+        let res;
+        try {
+            res = await deps.fetch((cl && cl.endpoint) || '/api/gemini', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + jwt },
+                body: JSON.stringify({ op: 'ping' }), signal: ctl.signal
+            });
+        } catch (e) {
+            if (ctl.signal.aborted) throw err(ctl.signal.reason === 'timeout' ? 'TIMEOUT' : 'ABORTED');
+            throw err(deps.online() ? 'NETWORK' : 'OFFLINE');
+        } finally { clearTimeout(timer); if (signal) signal.removeEventListener('abort', onAbort); }
+        let env = null;
+        try { env = await res.json(); } catch (_) { throw err('CLOUD_CONFIG'); }
+        mapCloudEnvelope(env);
+        if (env.ping !== true) throw err('CLOUD_CONFIG');
+        return deps.now() - t0;
+    }
+
     /**
-     * Uji koneksi dua tahap. Mode proxy: (1) proxy dan token, (2) Gemini lewat proxy. Mode langsung: hanya (2).
+     * Uji koneksi dua tahap. Mode proxy/cloud: (1) proxy/server dan token/sesi, (2) Gemini. Mode langsung: hanya (2).
      * Galat menyebut tahap yang gagal supaya penyebabnya jelas.
      */
     async function ping(signal, onStage) {
@@ -427,6 +506,9 @@ const AIService = (() => {
         if (st.mode === 'proxy') {
             if (onStage) onStage('proxy');
             proxyMs = await pingProxy(signal);
+        } else if (st.mode === 'cloud') {
+            if (onStage) onStage('proxy');
+            proxyMs = await pingCloud(signal);
         }
         if (onStage) onStage('gemini');
         const schema = { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] };

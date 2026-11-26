@@ -1,9 +1,18 @@
 // js/modules/classes.js
 // Dipecah dari sistem_administrasi_guru.html (Tahap 0). Skrip klasik: fungsi bersifat global.
+        function requireAdminClassAction() {
+            if (typeof Cloud !== 'undefined' && !Cloud.isAdmin()) {
+                showModal("Akses Dibatasi", "Daftar kelas dan rombel merupakan data sekolah yang dikelola oleh Admin Sekolah.", "🔒");
+                return false;
+            }
+            return true;
+        }
+
         function renderClasses() {
             let tbody = document.getElementById('classListBody');
             if (!tbody) return;
-            tbody.innerHTML = classes.map(c => {
+            const hideAct = (typeof Cloud !== 'undefined' && !Cloud.isAdmin()) ? 'hidden' : '';
+            tbody.innerHTML = classes.length ? classes.map(c => {
                 let count = allStudents.filter(s => s.periodId === activePeriodId && s.classId === c.classId).length;
                 return `
                     <tr>
@@ -15,16 +24,17 @@
                         <td class="p-3 text-center">
                             <div class="flex justify-center gap-1">
                                 <button onclick="changeGlobalClass('${c.classId}'); switchView('dashboard');" class="bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-blue-700 transition">Pilih Aktif</button>
-                                <button onclick="openModalClass('${c.classId}')" class="text-blue-600 font-bold text-xs bg-blue-50 px-2.5 py-1 rounded-lg hover:bg-blue-100 transition">✏️</button>
-                                <button onclick="deleteClass('${c.classId}')" class="text-red-600 font-bold text-xs bg-red-50 px-2.5 py-1 rounded-lg hover:bg-red-100 transition">🗑️</button>
+                                <button data-admin-only onclick="openModalClass('${c.classId}')" class="text-blue-600 font-bold text-xs bg-blue-50 px-2.5 py-1 rounded-lg hover:bg-blue-100 transition ${hideAct}">✏️</button>
+                                <button data-admin-only onclick="deleteClass('${c.classId}')" class="text-red-600 font-bold text-xs bg-red-50 px-2.5 py-1 rounded-lg hover:bg-red-100 transition ${hideAct}">🗑️</button>
                             </div>
                         </td>
                     </tr>
                 `;
-            }).join('');
+            }).join('') : `<tr><td colspan="6" class="text-center py-8 text-slate-400 italic">Belum ada kelas terdaftar pada periode ini.</td></tr>`;
         }
 
         function openModalClass(id = null) { 
+            if (!requireAdminClassAction()) return;
             let form = document.getElementById('formClass');
             if(form) form.reset();
             let elId = document.getElementById('clsId');
@@ -43,7 +53,8 @@
         }
 
         function saveClass(e) {
-            e.preventDefault();
+            if (e) e.preventDefault();
+            if (!requireAdminClassAction()) return;
             let elId = document.getElementById('clsId');
             let cId = (elId && elId.value) ? elId.value : genId('CLS');
             let cName = document.getElementById('clsName').value.trim();
@@ -67,6 +78,7 @@
         }
         
         function deleteClass(id) {
+            if (!requireAdminClassAction()) return;
             if (classes.length <= 1) {
                 showModal("Peringatan", "Gagal! Minimal harus ada 1 kelas tersisa di dalam sistem.", "⚠️");
                 return;
