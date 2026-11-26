@@ -15,6 +15,12 @@
             if(sTea) sTea.value = settings.teacher || '';
             let sNipTea = document.getElementById('setNipTeacher');
             if(sNipTea) sNipTea.value = settings.nipTeacher || '';
+            let sPgk = document.getElementById('setPangkatTeacher');
+            if(sPgk) sPgk.value = settings.pangkatTeacher || '';
+            let sPhn = document.getElementById('setPhoneTeacher');
+            if(sPhn) sPhn.value = settings.phoneTeacher || '';
+            let sFas = document.getElementById('setFase');
+            if(sFas) sFas.value = settings.fase || 'D';
             
             let sPri = document.getElementById('setPrincipal');
             if(sPri) sPri.value = settings.principal || '';
@@ -86,6 +92,12 @@
             settings.teacher = document.getElementById('setTeacher').value;
             let sNipTea = document.getElementById('setNipTeacher');
             if(sNipTea) settings.nipTeacher = sNipTea.value;
+            let sPgk = document.getElementById('setPangkatTeacher');
+            if(sPgk) settings.pangkatTeacher = sPgk.value.trim();
+            let sPhn = document.getElementById('setPhoneTeacher');
+            if(sPhn) settings.phoneTeacher = sPhn.value.trim();
+            let sFas = document.getElementById('setFase');
+            if(sFas) settings.fase = sFas.value;
 
             if (canEditSchool) {
                 settings.school = document.getElementById('setSchool').value;

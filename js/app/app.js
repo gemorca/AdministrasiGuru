@@ -184,39 +184,78 @@
         }
 
         function buildNav() {
-            const menu = [
-                { id: 'dashboard', icon: '📊', text: 'Dashboard' },
-                { id: 'students', icon: '👨‍🎓', text: 'Data Peserta Didik' },
-                { id: 'classes', icon: '🏫', text: 'Kelas & Rombel' },
-                { id: 'schedule', icon: '📅', text: 'Jadwal Mengajar' },
-                { id: 'curriculum', icon: '📚', text: 'Data Kurikulum' },
-                { id: 'analisis-cp', icon: '🪄', text: 'Analisis CP (AI)' },
-                { id: 'generator', icon: '🤖', text: 'Generator Modul Ajar' },
-                { id: 'bank-soal', icon: '🏦', text: 'Bank Soal & Asesmen' },
-                { id: 'p5', icon: '🎯', text: 'Proyek Profil (P5)' },
-                { id: 'assignments', icon: '📚', text: 'Tugas & LKPD' },
-                { id: 'attendance', icon: '📋', text: 'Absensi & Jurnal' },
-                { id: 'recap-attendance', icon: '📅', text: 'Rekap Kehadiran' },
-                { id: 'scores', icon: '📝', text: 'Daftar Nilai' },
-                { id: 'daily-analysis', icon: '📊', text: 'Analisis Ulangan' },
-                { id: 'remedial', icon: '🔄', text: 'Remedial & Pengayaan' },
-                { id: 'portfolio', icon: '📁', text: 'Portofolio Karya' },
-                { id: 'hasbi-rapor', icon: '📄', text: 'Analisis & Rapor' },
-                { id: 'jurnal-refleksi', icon: '📝', text: 'Jurnal & Refleksi' },
-                { id: 'communication', icon: '👨‍👩‍👧', text: 'Komunikasi & Wali' },
-                { id: 'documents', icon: '✉️', text: 'Surat & Dokumen' },
-                { id: 'reports', icon: '🖨️', text: 'Pusat Laporan' },
-                { id: 'backup', icon: '💾', text: 'Backup & Restore' },
-                { id: 'settings', icon: '⚙️', text: 'Pengaturan' }
+            const groups = [
+                {
+                    label: 'Utama & Kelas',
+                    items: [
+                        { id: 'dashboard', icon: '📊', text: 'Dashboard' },
+                        { id: 'students', icon: '👨‍🎓', text: 'Data Peserta Didik' },
+                        { id: 'classes', icon: '🏫', text: 'Kelas & Rombel' },
+                        { id: 'schedule', icon: '📅', text: 'Jadwal Mengajar' }
+                    ]
+                },
+                {
+                    label: 'Perangkat & AI',
+                    items: [
+                        { id: 'curriculum', icon: '📚', text: 'Data Kurikulum' },
+                        { id: 'analisis-cp', icon: '🪄', text: 'Analisis CP (AI)' },
+                        { id: 'generator', icon: '🤖', text: 'Generator Modul Ajar' },
+                        { id: 'bank-soal', icon: '🏦', text: 'Bank Soal & Asesmen' },
+                        { id: 'p5', icon: '🎯', text: 'Proyek Profil (P5)' }
+                    ]
+                },
+                {
+                    label: 'Pembelajaran & Nilai',
+                    items: [
+                        { id: 'assignments', icon: '📝', text: 'Tugas & LKPD' },
+                        { id: 'attendance', icon: '📋', text: 'Absensi & Jurnal' },
+                        { id: 'recap-attendance', icon: '📈', text: 'Rekap Kehadiran' },
+                        { id: 'scores', icon: '🏅', text: 'Daftar Nilai' },
+                        { id: 'daily-analysis', icon: '🔬', text: 'Analisis Ulangan' },
+                        { id: 'remedial', icon: '🔄', text: 'Remedial & Pengayaan' },
+                        { id: 'portfolio', icon: '📁', text: 'Portofolio Karya' },
+                        { id: 'hasbi-rapor', icon: '📄', text: 'Analisis & Rapor' },
+                        { id: 'jurnal-refleksi', icon: '📓', text: 'Jurnal & Refleksi' }
+                    ]
+                },
+                {
+                    label: 'Layanan & Sistem',
+                    items: [
+                        { id: 'communication', icon: '👨‍👩‍👧', text: 'Komunikasi & Wali' },
+                        { id: 'documents', icon: '✉️', text: 'Surat & Dokumen' },
+                        { id: 'reports', icon: '🖨️', text: 'Pusat Laporan' },
+                        { id: 'backup', icon: '💾', text: 'Backup & Restore' },
+                        { id: 'settings', icon: '⚙️', text: 'Pengaturan' }
+                    ]
+                }
             ];
             let nav = document.getElementById('navMenu');
             if (nav) {
-                nav.innerHTML = menu.map(m => `
-                    <button onclick="switchView('${m.id}')" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-left text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-white transition-colors" data-target="view-${m.id}">
-                        <span class="text-base">${m.icon}</span> ${esc(m.text)}
-                    </button>
+                nav.innerHTML = groups.map(g => `
+                    <div class="nav-group space-y-0.5 pt-2 first:pt-0">
+                        <div class="nav-group-title px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 select-none">${esc(g.label)}</div>
+                        ${g.items.map(m => `
+                            <button onclick="switchView('${m.id}')" class="nav-btn w-full flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-left text-xs font-semibold text-slate-300 hover:bg-slate-800/80 hover:text-white transition" data-target="view-${m.id}" data-label="${esc(m.text.toLowerCase())}">
+                                <span class="text-sm w-5 text-center flex-shrink-0">${m.icon}</span>
+                                <span class="truncate">${esc(m.text)}</span>
+                            </button>
+                        `).join('')}
+                    </div>
                 `).join('');
             }
+        }
+
+        function filterNavMenu(q) {
+            const term = String(q || '').trim().toLowerCase();
+            document.querySelectorAll('#navMenu .nav-group').forEach(grp => {
+                let visible = 0;
+                grp.querySelectorAll('.nav-btn').forEach(btn => {
+                    const match = !term || (btn.dataset.label || '').includes(term);
+                    btn.classList.toggle('hidden', !match);
+                    if (match) visible++;
+                });
+                grp.classList.toggle('hidden', visible === 0);
+            });
         }
 
         function updateHeader() {
@@ -263,6 +302,8 @@
             });
             const target = document.getElementById(`view-${viewId}`);
             if (target) target.classList.add('active', 'active-print');
+            const mainEl = document.getElementById('mainContainer');
+            if (mainEl) mainEl.scrollTop = 0;
             const btn = document.querySelector(`.nav-btn[data-target="view-${viewId}"]`);
             if (btn) {
                 btn.classList.remove('text-slate-300');

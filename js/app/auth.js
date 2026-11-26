@@ -457,8 +457,239 @@ const Auth = (() => {
         if (setNote) setNote.classList.toggle('hidden', !Cloud.enabled || admin);
         const teamCard = $('adminTeamCard');
         if (teamCard) teamCard.classList.toggle('hidden', !(Cloud.enabled && admin));
-        const pwCard = $('changePwCard');
-        if (pwCard) pwCard.classList.toggle('hidden', !(Cloud.enabled && Cloud.ready));
+        const pwSec = $('profilePasswordSection');
+        if (pwSec) pwSec.classList.toggle('hidden', !(Cloud.enabled && Cloud.ready));
+        const btnLogout = $('btnMenuLogout');
+        if (btnLogout) btnLogout.classList.toggle('hidden', !(Cloud.enabled && Cloud.ready));
+    }
+
+    function getInitials(rawName) {
+        const clean = String(rawName || '').split(',')[0].replace(/[^A-Za-zÀ-ÿ0-9\s]/g, ' ').trim();
+        if (!clean) return 'GM';
+        const parts = clean.split(/\s+/).filter(Boolean);
+        if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+        return parts[0].slice(0, 2).toUpperCase();
+    }
+
+    function currentDisplayName() {
+        const t = (typeof settings !== 'undefined' && settings && settings.teacher) ? String(settings.teacher).trim() : '';
+        if (t && t !== 'Guru Mapel') return t;
+        if (Cloud.user && Cloud.user.name) return Cloud.user.name;
+        return t || 'Guru Mapel';
+    }
+
+    function toggleUserMenu(e) {
+        if (e) e.stopPropagation();
+        const menu = $('userDropdownMenu');
+        const btn = $('userAvatarBtn');
+        if (!menu) return;
+        const willOpen = menu.classList.contains('hidden');
+        menu.classList.toggle('hidden', !willOpen);
+        if (btn) btn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    }
+
+    function closeUserMenu() {
+        const menu = $('userDropdownMenu');
+        const btn = $('userAvatarBtn');
+        if (menu) menu.classList.add('hidden');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+    }
+
+    if (typeof document !== 'undefined') {
+        document.addEventListener('click', e => {
+            const wrap = $('userMenuWrapper');
+            if (wrap && !wrap.contains(e.target)) closeUserMenu();
+        });
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
+                closeUserMenu();
+                const mp = $('modalProfile');
+                if (mp && !mp.classList.contains('hidden')) closeProfileModal();
+            }
+        });
+    }
+
+    function populateProfileView() {
+        const s = (typeof settings !== 'undefined' && settings) ? settings : {};
+        const name = currentDisplayName();
+        const initials = getInitials(name);
+        const email = (Cloud.enabled && Cloud.user && Cloud.user.email) ? Cloud.user.email : (s.emailTeacher || '-');
+        const roleText = Cloud.enabled ? (Cloud.isAdmin() ? 'Admin Sekolah' : 'Guru Mata Pelajaran') : 'Mode Lokal (Perangkat Ini)';
+        const activePer = (typeof periods !== 'undefined' && Array.isArray(periods))
+            ? (periods.find(p => p.id === activePeriodId) || periods[0])
+            : null;
+        const perText = activePer ? `${activePer.year} • Semester ${activePer.semester}` : `${s.academicYear || '-'} • Semester ${s.semester || '-'}`;
+
+        const setTxt = (id, val) => { const el = $(id); if (el) el.innerText = (val && String(val).trim()) ? String(val).trim() : '-'; };
+        setTxt('profileModalInitials', initials);
+        setTxt('profileModalName', name);
+        setTxt('profileModalEmail', email);
+        setTxt('profileModalRole', roleText);
+
+        setTxt('pvTeacher', name);
+        setTxt('pvNip', s.nipTeacher);
+        setTxt('pvPangkat', s.pangkatTeacher);
+        setTxt('pvEmail', email);
+        setTxt('pvPhone', s.phoneTeacher);
+        setTxt('pvSubject', s.subject);
+        setTxt('pvFase', s.fase ? `Fase ${s.fase}` : '-');
+        setTxt('pvSchool', s.school);
+        setTxt('pvPeriod', perText);
+        setTxt('pvPrincipal', s.principal);
+        setTxt('pvNipPrincipal', s.nipPrincipal);
+    }
+
+    function populateProfileEdit() {
+        const s = (typeof settings !== 'undefined' && settings) ? settings : {};
+        const name = currentDisplayName();
+        const email = (Cloud.enabled && Cloud.user && Cloud.user.email) ? Cloud.user.email : (s.emailTeacher || '');
+        const lockSchool = Cloud.enabled && !Cloud.isAdmin();
+
+        const setVal = (id, val) => { const el = $(id); if (el) el.value = val !== undefined && val !== null ? val : ''; };
+        setVal('peTeacher', name);
+        setVal('peNip', s.nipTeacher === '-' ? '' : (s.nipTeacher || ''));
+        setVal('pePangkat', s.pangkatTeacher || '');
+        setVal('pePhone', s.phoneTeacher || '');
+        setVal('peEmail', email);
+        const emailEl = $('peEmail');
+        if (emailEl) {
+            emailEl.readOnly = Cloud.enabled;
+            emailEl.classList.toggle('bg-slate-100', Cloud.enabled);
+            emailEl.classList.toggle('text-slate-500', Cloud.enabled);
+        }
+
+        const subSel = $('peSubject');
+        if (subSel && s.subject) {
+            if (!Array.from(subSel.options).some(o => o.value === s.subject)) {
+                const opt = document.createElement('option');
+                opt.value = s.subject;
+                opt.textContent = s.subject;
+                subSel.appendChild(opt);
+            }
+            subSel.value = s.subject;
+        }
+        setVal('peFase', s.fase || 'D');
+        setVal('peSchool', s.school || '');
+        setVal('peAcademicYear', s.academicYear || '');
+        setVal('peSemester', s.semester || 'GENAP');
+        setVal('pePrincipal', s.principal || '');
+        setVal('peNipPrincipal', s.nipPrincipal === '-' ? '' : (s.nipPrincipal || ''));
+
+        const note = $('peSchoolLockNote');
+        if (note) note.classList.toggle('hidden', !lockSchool);
+        ['peSchool', 'peAcademicYear', 'peSemester', 'pePrincipal', 'peNipPrincipal'].forEach(id => {
+            const el = $(id);
+            if (!el) return;
+            el.disabled = lockSchool;
+            el.classList.toggle('bg-slate-100', lockSchool);
+            el.classList.toggle('text-slate-500', lockSchool);
+        });
+
+        const peMsg = $('peMsg');
+        if (peMsg) { peMsg.className = 'hidden'; peMsg.innerText = ''; }
+        const cpMsg = $('cpMsg');
+        if (cpMsg) { cpMsg.className = 'hidden'; cpMsg.innerText = ''; }
+        const pwSec = $('profilePasswordSection');
+        if (pwSec) pwSec.classList.toggle('hidden', !(Cloud.enabled && Cloud.ready));
+    }
+
+    function switchProfileMode(mode) {
+        const isEdit = mode === 'edit';
+        const viewEl = $('profileViewPanel');
+        const editEl = $('profileEditPanel');
+        if (viewEl) viewEl.classList.toggle('hidden', isEdit);
+        if (editEl) editEl.classList.toggle('hidden', !isEdit);
+        if (isEdit) populateProfileEdit(); else populateProfileView();
+    }
+
+    function openProfileModal(initialMode = 'view') {
+        closeUserMenu();
+        const modal = $('modalProfile');
+        if (!modal) return;
+        populateProfileView();
+        switchProfileMode(initialMode === 'edit' ? 'edit' : 'view');
+        modal.classList.remove('hidden');
+    }
+
+    function closeProfileModal() {
+        const modal = $('modalProfile');
+        if (modal) modal.classList.add('hidden');
+    }
+
+    async function saveProfileBiodata(e) {
+        if (e) e.preventDefault();
+        const teacherName = ($('peTeacher').value || '').trim();
+        const peMsg = $('peMsg');
+        const showFeedback = (txt, isErr) => {
+            if (!peMsg) return;
+            peMsg.innerText = txt;
+            peMsg.className = 'text-xs rounded-xl p-3 border ' + (isErr
+                ? 'bg-red-50 text-red-700 border-red-200'
+                : 'bg-emerald-50 text-emerald-800 border-emerald-200');
+        };
+        if (!teacherName) {
+            showFeedback('Nama lengkap wajib diisi.', true);
+            return;
+        }
+        const btn = $('btnSaveProfileBiodata');
+        if (btn) { btn.disabled = true; btn.innerText = 'Menyimpan...'; }
+        try {
+            const canEditSchool = !Cloud.enabled || Cloud.isAdmin();
+            settings.teacher = teacherName;
+            settings.nipTeacher = ($('peNip').value || '').trim() || '-';
+            settings.pangkatTeacher = ($('pePangkat').value || '').trim();
+            settings.phoneTeacher = ($('pePhone').value || '').trim();
+            if (!Cloud.enabled) settings.emailTeacher = ($('peEmail').value || '').trim();
+            settings.subject = $('peSubject').value || settings.subject;
+            settings.fase = $('peFase').value || 'D';
+
+            if (canEditSchool) {
+                settings.school = ($('peSchool').value || '').trim() || settings.school;
+                settings.academicYear = ($('peAcademicYear').value || '').trim() || settings.academicYear;
+                settings.semester = $('peSemester').value || settings.semester;
+                settings.principal = ($('pePrincipal').value || '').trim() || settings.principal;
+                settings.nipPrincipal = ($('peNipPrincipal').value || '').trim() || '-';
+
+                if (typeof periods !== 'undefined' && Array.isArray(periods)) {
+                    const activePeriod = periods.find(p => p.id === activePeriodId);
+                    if (activePeriod) {
+                        activePeriod.year = settings.academicYear;
+                        activePeriod.semester = settings.semester;
+                        if (Cloud.enabled) {
+                            activePeriod.school = settings.school;
+                            activePeriod.principal = settings.principal;
+                            activePeriod.nipPrincipal = settings.nipPrincipal;
+                        }
+                    }
+                }
+            }
+
+            if (Cloud.enabled && Cloud.ready && remote && typeof remote.updateProfile === 'function') {
+                try {
+                    const payload = { name: teacherName };
+                    if (Cloud.isAdmin() && settings.school) payload.school = settings.school;
+                    const r = await remote.updateProfile(payload);
+                    if (r && r.ok) {
+                        if (Cloud.user) Cloud.user.name = teacherName;
+                        if (Cloud.school && settings.school && Cloud.isAdmin()) Cloud.school.name = settings.school;
+                    }
+                } catch (_) {
+                    // Tetap lanjut menyimpan lokal & antrean sinkronisasi g_set bila server belum diperbarui
+                    if (Cloud.user) Cloud.user.name = teacherName;
+                }
+            }
+
+            if (typeof saveAllData === 'function') saveAllData();
+            if (typeof updateHeader === 'function') updateHeader();
+            const activeSec = document.querySelector('.view-section.active');
+            if (activeSec && activeSec.id === 'view-settings' && typeof renderSettings === 'function') renderSettings();
+
+            populateProfileView();
+            switchProfileMode('view');
+            showModal('Profil Diperbarui', 'Biodata Anda berhasil disimpan dan disinkronkan.', '✅');
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerText = '💾 Simpan Biodata'; }
+        }
     }
 
     async function changePassword(e) {
@@ -468,19 +699,24 @@ const Auth = (() => {
         const newPw = $('cpNew').value || '';
         const newPw2 = $('cpNew2').value || '';
         const msg = $('cpMsg');
+        const btn = $('btnSavePassword');
         const show = (t, err) => {
+            if (!msg) return;
             msg.innerText = t;
             msg.className = 'text-xs rounded-xl p-3 border ' + (err ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200');
         };
         if (newPw.length < 8) { show(REASONS.PASSWORD_WEAK, true); return; }
         if (newPw !== newPw2) { show('Konfirmasi kata sandi baru tidak sama.', true); return; }
+        if (btn) { btn.disabled = true; btn.innerText = 'Memperbarui...'; }
         try {
             const res = await remote.changePassword(oldPw, newPw);
             if (!res || !res.ok) { show(res && res.reason === 'BAD_CREDENTIALS' ? 'Kata sandi lama salah.' : (REASONS[res && res.reason] || 'Gagal mengubah kata sandi.'), true); return; }
             $('cpOld').value = ''; $('cpNew').value = ''; $('cpNew2').value = '';
-            show('Kata sandi berhasil diubah.', false);
+            show('Kata sandi berhasil diperbarui.', false);
         } catch (err) {
             show(err && err.message ? err.message : 'Gagal mengubah kata sandi.', true);
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerText = '🔑 Perbarui Kata Sandi'; }
         }
     }
 
@@ -498,6 +734,35 @@ const Auth = (() => {
     }
 
     function renderHeader() {
+        const name = currentDisplayName();
+        const initials = getInitials(name);
+        const av1 = $('headerAvatarInitials');
+        if (av1) av1.innerText = initials;
+        const av2 = $('dropdownAvatarInitials');
+        if (av2) av2.innerText = initials;
+        const dName = $('dropdownUserName');
+        if (dName) dName.innerText = name;
+        const dSub = $('dropdownUserSub');
+        if (dSub) {
+            dSub.innerText = (Cloud.enabled && Cloud.user && Cloud.user.email)
+                ? Cloud.user.email
+                : ((typeof settings !== 'undefined' && settings.subject) || 'Ruang Kerja Lokal');
+        }
+        const dRole = $('dropdownRoleBadge');
+        if (dRole) {
+            if (Cloud.enabled && Cloud.ready) {
+                dRole.innerText = Cloud.isAdmin() ? 'Admin Sekolah' : 'Guru Mapel';
+                dRole.className = 'inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ' + (Cloud.isAdmin()
+                    ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                    : 'bg-blue-50 text-blue-700 border-blue-200');
+            } else {
+                dRole.innerText = 'Mode Lokal';
+                dRole.className = 'inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full border bg-slate-100 text-slate-600 border-slate-200';
+            }
+        }
+        const btnLogout = $('btnMenuLogout');
+        if (btnLogout) btnLogout.classList.toggle('hidden', !(Cloud.enabled && Cloud.ready));
+
         const bar = $('cloudHeaderBar');
         if (!bar) return;
         bar.classList.toggle('hidden', !(Cloud.enabled && Cloud.ready));
@@ -505,7 +770,7 @@ const Auth = (() => {
         const roleBadge = $('cloudRoleBadge');
         if (roleBadge) {
             roleBadge.innerText = Cloud.isAdmin() ? 'Admin Sekolah' : 'Guru Mapel';
-            roleBadge.className = 'text-[10px] font-bold px-2.5 py-1 rounded-full border ' + (Cloud.isAdmin()
+            roleBadge.className = 'hidden lg:inline-flex text-[10px] font-bold px-2.5 py-1 rounded-full border ' + (Cloud.isAdmin()
                 ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
                 : 'bg-slate-100 text-slate-700 border-slate-200');
         }
@@ -736,6 +1001,13 @@ const Auth = (() => {
         showLogin,
         showRegister,
         togglePassword,
+        toggleUserMenu,
+        closeUserMenu,
+        openProfileModal,
+        closeProfileModal,
+        switchProfileMode,
+        saveProfileBiodata,
+        getInitials,
         changePassword,
         resetMemberPassword,
         retryGate,

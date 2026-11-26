@@ -254,3 +254,23 @@ test('google_login tanpa GOOGLE_CLIENT_ID ditolak', () => {
     const b = makeBackend();
     assert.equal(b.call({ action: 'google_login', credential: gtok('a@mail.com') }).reason, 'GOOGLE_INVALID');
 });
+
+test('update_profile: memperbarui nama pengguna dan hanya admin yang dapat mengubah nama sekolah', () => {
+    const b = makeBackend();
+    const admin = reg(b);
+    const guru = reg(b, { email: 'ani@mail.com', name: 'Ani' });
+
+    assert.equal(b.call({ action: 'update_profile', token: guru.token, name: '   ' }).reason, 'NAME_REQUIRED');
+    const upGuru = b.call({ action: 'update_profile', token: guru.token, name: 'Ani Wijaya, S.Pd.', school: 'Sekolah Palsu' });
+    assert.equal(upGuru.ok, true);
+    assert.equal(upGuru.name, 'Ani Wijaya, S.Pd.');
+    assert.equal(upGuru.school_name, 'SMPN 1'); // guru tidak bisa mengubah nama sekolah
+
+    const meGuru = b.call({ action: 'me', token: guru.token });
+    assert.equal(meGuru.name, 'Ani Wijaya, S.Pd.');
+
+    const upAdmin = b.call({ action: 'update_profile', token: admin.token, name: 'Budi Santoso, M.Pd.', school: 'SMP Negeri 2 Maju' });
+    assert.equal(upAdmin.ok, true);
+    assert.equal(upAdmin.name, 'Budi Santoso, M.Pd.');
+    assert.equal(upAdmin.school_name, 'SMP Negeri 2 Maju');
+});

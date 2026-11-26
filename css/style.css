@@ -1,71 +1,231 @@
-/* Gaya tambahan & responsif (mobile < 768px, tablet 768-1023px, desktop >= 1024px).
-   Dimuat SETELAH css/tailwind.css. Selektor memakai #id / html body agar menang atas utilitas Tailwind. */
+/* Desain Sistem UI/UX & Responsif (Mobile < 768px, Tablet 768-1023px, Desktop >= 1024px).
+   Dimuat SETELAH css/tailwind.css agar peningkatan tipografi, tabel, kartu, dan avatar bekerja seragam. */
 
-:root { --sidebar-w: 16rem; }
+:root {
+    --sidebar-w: 16.25rem;
+    --brand-primary: #2563eb;
+    --brand-indigo: #4f46e5;
+}
+
 html, body { -webkit-text-size-adjust: 100%; }
-body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; }
+body {
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    background-color: #f1f5f9;
+    color: #0f172a;
+    -webkit-font-smoothing: antialiased;
+}
 img, canvas, video { max-width: 100%; }
 button, [role="button"], select { touch-action: manipulation; }
 
-/* ---------- Gerbang login ---------- */
-.auth-gate { background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 55%, #2563eb 100%); }
-.auth-card { animation: authIn .35s ease-out; }
-@keyframes authIn { from { opacity: 0; transform: translateY(12px) scale(.98); } to { opacity: 1; transform: none; } }
-.auth-input { background: #fff; transition: border-color .15s, box-shadow .15s; }
-.auth-input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, .18); }
-/* 16px mencegah iOS memperbesar layar saat input difokuskan */
+/* ---------- Gerbang Login & Register ---------- */
+.auth-gate {
+    background: radial-gradient(circle at 15% 20%, rgba(59, 130, 246, .35) 0%, transparent 45%),
+                radial-gradient(circle at 85% 80%, rgba(99, 102, 241, .35) 0%, transparent 45%),
+                linear-gradient(135deg, #0b1120 0%, #172554 55%, #1e3a8a 100%);
+}
+.auth-card {
+    animation: authIn .32s cubic-bezier(.16, 1, .3, 1);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, .45);
+}
+@keyframes authIn { from { opacity: 0; transform: translateY(14px) scale(.98); } to { opacity: 1; transform: none; } }
+.auth-input { background: #f8fafc; transition: background-color .15s, border-color .15s, box-shadow .15s; }
+.auth-input:focus { background: #fff; outline: none; border-color: var(--brand-primary); box-shadow: 0 0 0 3.5px rgba(37, 99, 235, .16); }
 .auth-input, #authGate input { font-size: 16px; }
 
-/* ---------- Modal: selalu bisa discroll bila lebih tinggi dari layar ---------- */
-[id^="modal"] > form, [id^="modal"] > div { max-height: 92vh; overflow-y: auto; }
+/* ---------- Avatar Inisial (Radius 50%) & Dropdown Profil ---------- */
+.user-avatar-btn, .user-avatar-circle {
+    border-radius: 50% !important;
+    background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+    letter-spacing: .02em;
+}
+.user-avatar-btn {
+    border: 2px solid #fff;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, .28), 0 0 0 1px rgba(37, 99, 235, .18);
+    transition: transform .15s ease, box-shadow .15s ease;
+}
+.user-avatar-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, .38), 0 0 0 3px rgba(37, 99, 235, .16);
+}
+.user-avatar-btn:focus-visible {
+    box-shadow: 0 0 0 3.5px rgba(37, 99, 235, .32);
+}
+.user-dropdown {
+    transform-origin: top right;
+    animation: dropdownIn .16s cubic-bezier(.16, 1, .3, 1);
+}
+@keyframes dropdownIn { from { opacity: 0; transform: translateY(-6px) scale(.97); } to { opacity: 1; transform: none; } }
+.profile-hero {
+    background: linear-gradient(135deg, #1d4ed8 0%, #4338ca 58%, #312e81 100%);
+}
 
-/* ---------- Overlay sidebar (hanya dipakai di mobile) ---------- */
-.sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, .55); z-index: 65; opacity: 0; transition: opacity .25s; }
+/* ---------- Sidebar & Navigasi ---------- */
+.app-sidebar {
+    background: linear-gradient(180deg, #0f172a 0%, #0b1324 100%);
+}
+.nav-search {
+    background: rgba(30, 41, 59, .75);
+    border: 1px solid rgba(51, 65, 85, .8);
+    transition: border-color .15s, background-color .15s;
+}
+.nav-search:focus {
+    background: rgba(30, 41, 59, 1);
+    border-color: #3b82f6;
+}
+#navMenu::-webkit-scrollbar { width: 5px; }
+#navMenu::-webkit-scrollbar-track { background: transparent; }
+#navMenu::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, .22); border-radius: 999px; }
+#navMenu::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, .4); }
+.nav-btn.bg-blue-600 {
+    background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%) !important;
+    box-shadow: 0 6px 16px -4px rgba(37, 99, 235, .45);
+}
+
+/* ---------- Kartu, Statistik Dashboard, & Seksi Utama ---------- */
+#mainContainer { background: #f1f5f9; scroll-behavior: smooth; }
+.view-section > div.bg-white, .view-section form.bg-white {
+    border-color: rgba(226, 232, 240, .9);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .04), 0 4px 12px rgba(15, 23, 42, .025);
+}
+.stat-card {
+    position: relative;
+    overflow: hidden;
+    transition: transform .18s ease, box-shadow .18s ease;
+}
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+}
+.stat-card.stat-blue::before { background: linear-gradient(90deg, #2563eb, #60a5fa); }
+.stat-card.stat-emerald::before { background: linear-gradient(90deg, #059669, #34d399); }
+.stat-card.stat-indigo::before { background: linear-gradient(90deg, #4f46e5, #818cf8); }
+.stat-card.stat-amber::before { background: linear-gradient(90deg, #d97706, #fbbf24); }
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px -8px rgba(15, 23, 42, .1);
+}
+
+/* ---------- Form Input, Select, Textarea, & Tombol ---------- */
+main input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+main select,
+main textarea,
+[id^="modal"] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+[id^="modal"] select,
+[id^="modal"] textarea {
+    transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+main input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
+main select:focus,
+main textarea:focus,
+[id^="modal"] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
+[id^="modal"] select:focus,
+[id^="modal"] textarea:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, .14);
+}
+button:active:not(:disabled) { transform: scale(.99); }
+
+/* ---------- Tabel Modern & Mudah Dibaca ---------- */
+main .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+}
+main table {
+    width: 100%;
+    border-collapse: collapse;
+}
+main table thead th {
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .025em;
+    text-transform: uppercase;
+    color: #475569;
+    background-color: #f8fafc;
+    white-space: nowrap;
+}
+main table tbody tr {
+    transition: background-color .12s ease;
+}
+main table tbody tr:hover {
+    background-color: #f8fafc;
+}
+
+/* ---------- Modal Halus ---------- */
+[id^="modal"]:not(.hidden) {
+    backdrop-filter: blur(3px);
+}
+[id^="modal"] > form, [id^="modal"] > div {
+    max-height: 92vh;
+    overflow-y: auto;
+    animation: modalPop .2s cubic-bezier(.16, 1, .3, 1);
+}
+@keyframes modalPop { from { opacity: 0; transform: translateY(8px) scale(.985); } to { opacity: 1; transform: none; } }
+
+/* ---------- Overlay Sidebar Mobile ---------- */
+.sidebar-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, .55);
+    backdrop-filter: blur(2px);
+    z-index: 65;
+    opacity: 0;
+    transition: opacity .25s;
+}
 
 /* ---------- Mobile (< 768px) ---------- */
 @media screen and (max-width: 767px) {
     html body #sidebar {
         display: flex !important;
         position: fixed; top: 0; bottom: 0; left: 0;
-        width: min(17rem, 85vw);
+        width: min(17.5rem, 86vw);
         z-index: 70;
         transform: translateX(-105%);
-        transition: transform .28s ease;
+        transition: transform .26s cubic-bezier(.16, 1, .3, 1);
         box-shadow: none;
     }
-    html body #sidebar.open { transform: none; box-shadow: 0 0 40px rgba(0, 0, 0, .45); }
+    html body #sidebar.open { transform: none; box-shadow: 0 0 40px rgba(0, 0, 0, .5); }
     .sidebar-overlay.open { display: block; opacity: 1; }
     body.sidebar-open { overflow: hidden; }
 
-    html body header { padding-left: .75rem; padding-right: .75rem; gap: .5rem; flex-wrap: wrap; }
-    html body header #headerSchool { max-width: 55vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    html body header #headerInfo { max-width: 55vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    html body main { padding: .75rem; }
+    html body main { padding: .875rem; }
+    html body .view-section h3.text-2xl { font-size: 1.25rem; line-height: 1.65rem; }
 
-    /* Grid tanpa varian responsif diperkecil agar muat */
-    html body .grid-cols-3, html body .grid-cols-4, html body .grid-cols-5, html body .grid-cols-6 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    /* Grid padat dirapikan agar nyaman dibaca di layar sempit */
+    html body .grid-cols-3, html body .grid-cols-4, html body .grid-cols-5, html body .grid-cols-6 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
     html body .col-span-2, html body .col-span-3, html body .col-span-4 { grid-column: 1 / -1; }
 
-    /* Tabel bisa digeser ke samping, tidak memecah layout halaman */
-    html body main table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; }
+    /* Tabel tetap utuh (display: table) namun bergulir horizontal mulus di dalam kontainer */
+    html body main table { min-width: 560px; }
 
-    /* Target sentuh nyaman */
-    html body main button, html body main select, html body main input:not([type="checkbox"]):not([type="radio"]) { min-height: 40px; }
-    html body main input, html body main select, html body main textarea { font-size: 16px; }
-    html body .max-w-3xl, html body .max-w-4xl, html body .max-w-5xl { max-width: 100%; }
+    /* Cegah auto-zoom iOS pada input tanpa merusak ukuran tombol kecil di dalam tabel */
+    html body main input:not([type="checkbox"]):not([type="radio"]),
+    html body main select,
+    html body main textarea,
+    html body [id^="modal"] input:not([type="checkbox"]):not([type="radio"]),
+    html body [id^="modal"] select,
+    html body [id^="modal"] textarea {
+        font-size: 16px;
+        min-height: 40px;
+    }
+    html body .max-w-2xl, html body .max-w-3xl, html body .max-w-4xl, html body .max-w-5xl { max-width: 100%; }
+    html body .user-dropdown { width: min(16.5rem, calc(100vw - 1.5rem)); }
 }
 
 /* ---------- Tablet (768px - 1023px) ---------- */
 @media screen and (min-width: 768px) and (max-width: 1023px) {
-    html body #sidebar { width: 14rem; }
-    html body main { padding: 1rem; }
+    html body #sidebar { width: 14.5rem; }
+    html body main { padding: 1.125rem; }
     html body .grid-cols-5, html body .grid-cols-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    html body main table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 }
 
-/* ---------- Desktop lebar ---------- */
+/* ---------- Desktop Lebar (>= 1280px) ---------- */
 @media screen and (min-width: 1280px) {
-    html body main { padding: 1.5rem 2rem; }
+    html body main { padding: 1.5rem 2.25rem; }
 }
 
 /* Hormati preferensi kurangi gerak */
@@ -73,8 +233,11 @@ button, [role="button"], select { touch-action: manipulation; }
     *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
 
-/* Cetak: jangan terkena aturan responsif */
+/* Cetak: jangan terkena aturan UI layar */
 @media print {
-    .sidebar-overlay, .auth-gate { display: none !important; }
-    html body main table { display: table !important; overflow: visible !important; white-space: normal !important; }
+    .sidebar-overlay, .auth-gate, #modalProfile { display: none !important; }
+    #mainContainer { background: #fff !important; }
+    .stat-card::before { display: none !important; }
+    html body main table { display: table !important; min-width: 0 !important; overflow: visible !important; white-space: normal !important; }
+    main table thead th { background-color: transparent !important; color: #000 !important; }
 }

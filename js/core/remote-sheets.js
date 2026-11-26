@@ -98,6 +98,7 @@ const RemoteSheets = (() => {
                 if (t) { try { await call({ action: 'logout', token: t }, { noToken: true }); } catch (_) {} }
             },
             changePassword: (oldPassword, newPassword) => call({ action: 'change_password', oldPassword, newPassword }),
+            updateProfile: data => call({ action: 'update_profile', ...(data || {}) }),
 
             async push(items) { const r = await call({ action: 'push', items: items || [] }); return { rejected: r.rejected || [] }; },
             async pull(sinceSeq = 0, limit = 500, opts = {}) {

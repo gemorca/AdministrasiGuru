@@ -171,6 +171,7 @@ function handleSheets_(req) {
       case 'me': return Object.assign({ ok: true }, meOf_(user));
       case 'logout': dropSession_(req.token); return { ok: true };
       case 'change_password': return actChangePassword_(user, req);
+      case 'update_profile': return actUpdateProfile_(user, req);
       case 'push': return actPush_(user, req);
       case 'pull': return actPull_(user, req);
       case 'get_record': return actGetRecord_(user, req);
@@ -291,6 +292,20 @@ function actChangePassword_(user, req) {
     var salt = newSalt_();
     sheet_(SH_.USERS, USER_HEAD_).getRange(user.row, 5, 1, 2).setValues([[salt, hashPw_(newPw, salt)]]);
     return { ok: true };
+  });
+}
+
+function actUpdateProfile_(user, req) {
+  var name = str_(req.name, 80);
+  if (!name) return { ok: false, reason: 'NAME_REQUIRED' };
+  return withLock_(function () {
+    sheet_(SH_.USERS, USER_HEAD_).getRange(user.row, 3).setValue(name);
+    if (user.role === 'admin' && req.school !== undefined) {
+      var school = str_(req.school, 120);
+      if (school) cfgSet_('school_name', school);
+    }
+    var updated = { id: user.id, email: user.email, name: name, role: user.role };
+    return Object.assign({ ok: true }, meOf_(updated));
   });
 }
 
