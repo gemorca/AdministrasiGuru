@@ -17,10 +17,10 @@ Dengan mode ini:
 3. Setelah proyek aktif, buka menu **SQL Editor** di bilah kiri -> klik **New query**.
 4. Salin seluruh isi berkas `supabase/schema.sql`, tempel ke SQL Editor, lalu tekan **Run**.
 5. Pastikan hasilnya **Success**. Skrip ini membuat tabel `schools`, `members`, `invites`, `records`, `ai_usage`, seluruh aturan keamanan **Row Level Security (RLS)**, serta fungsi RPC sinkronisasi dan kuota AI.
-6. Buka **Project Settings > API**, lalu catat dua nilai berikut:
+6. Buka **Project Settings > API** (atau **API Keys**), lalu catat dua nilai berikut:
    - **Project URL** (`https://xxxx.supabase.co`) -> ini adalah `SUPABASE_URL`.
-   - **Project API keys > `anon` `public`** (`eyJ...`) -> ini adalah `SUPABASE_ANON_KEY`.
-   *(Catatan: `anon` key memang dirancang aman untuk publik karena seluruh tabel dilindungi RLS).*
+   - **Publishable key** (`sb_publishable_...`) atau tab Legacy **`anon` `public`** (`eyJ...`) -> ini adalah `SUPABASE_ANON_KEY`.
+   *(Catatan: `publishable` / `anon` key memang dirancang aman untuk publik karena seluruh tabel dilindungi RLS. **JANGAN** pernah menyalin **Secret key** `sb_secret_...` atau `service_role` ke `app-config.js`!).*
 
 ---
 
@@ -76,7 +76,7 @@ Saat pemilik `email.admin.sekolah@gmail.com` pertama kali menekan **Masuk dengan
 1. Buka berkas `app-config.js` di repositori proyek, lalu aktifkan `supabaseUrl` dan `supabaseAnonKey`:
    ```js
    window.APP_CONFIG = window.APP_CONFIG || {
-       supabaseUrl: 'https://xxxx.supabase.co',
+       supabaseUrl: 'https://ulcnhluflppgavhrsrri.supabase.co',
        supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
        ai: {
            model: 'gemini-3.6-flash',

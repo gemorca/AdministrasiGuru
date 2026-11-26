@@ -12,8 +12,9 @@
  */
 window.APP_CONFIG = window.APP_CONFIG || {
     // Aktifkan mode Cloud Multi-Guru dengan mengisi dua baris berikut (lihat supabase/PANDUAN.md):
-    // supabaseUrl: 'https://NAMA-PROYEK.supabase.co',
-    // supabaseAnonKey: 'eyJ...',
+    // PENTING: Gunakan Publishable key (sb_publishable_...) atau anon public key (eyJ...), JANGAN gunakan Secret key (sb_secret_...)!
+    supabaseUrl: 'https://ulcnhluflppgavhrsrri.supabase.co',
+    supabaseAnonKey: '',
     ai: {
         proxyUrl: 'https://script.google.com/macros/s/AKfycbzAgFnBR9o3l3bEQuz4iATRi9vPZxNNb1jH1idm3IeWkOTwBragJU_iYVD6L1hJMdae/exec',                  // URL Web App Apps Script, berakhiran /exec
         token: 'mohamadagilnurekaputrasabdul2026',                     // sama dengan APP_TOKEN di Script Properties
