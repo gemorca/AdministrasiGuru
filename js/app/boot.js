@@ -1,7 +1,7 @@
 /**
  * Titik masuk aplikasi.
  * Menyiapkan penyimpanan (IndexedDB atau localStorage), menghubungkan galat penyimpanan ke modal,
- * menjalankan gerbang login cloud (bila APP_CONFIG.supabaseUrl diatur) ATAU langsung initApp untuk mode lokal.
+ * menjalankan gerbang login cloud (bila APP_CONFIG.sheetsUrl diatur) ATAU langsung initApp untuk mode lokal.
  */
 window.onload = async function () {
     Store.onError = function (msg) { showModal('Peringatan Penyimpanan', msg, '\u26A0\uFE0F'); };

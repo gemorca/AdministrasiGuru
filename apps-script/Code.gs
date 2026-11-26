@@ -35,14 +35,28 @@ function doGet() {
 }
 
 function doPost(e) {
+  var req;
+  try { req = JSON.parse(e.postData.contents); } catch (err) { return json_({ proxyError: 'BAD_REQUEST' }); }
+
+  // Backend Spreadsheet (login, register, sinkronisasi data): lihat Sheets.gs
+  if (req && req.action) return json_(handleSheets_(req));
+
   var props = PropertiesService.getScriptProperties();
   var key = props.getProperty('GEMINI_API_KEY');
   var token = props.getProperty('APP_TOKEN');
-  if (!key || !token) return json_({ proxyError: 'CONFIG' });
+  if (!key) return json_({ proxyError: 'CONFIG' });
 
-  var req;
-  try { req = JSON.parse(e.postData.contents); } catch (err) { return json_({ proxyError: 'BAD_REQUEST' }); }
-  if (!safeEquals_(String(req.token || ''), token)) return json_({ proxyError: 'AUTH' });
+  // Dua cara otorisasi: sesi login guru ("session:<token>", disarankan, tanpa rahasia di browser)
+  // atau APP_TOKEN lama (opsional).
+  var given = String(req.token || '');
+  var authorized = false;
+  if (given.indexOf('session:') === 0) {
+    try { authorized = !!userFromToken_(given.slice(8)); } catch (err) { authorized = false; }
+  } else {
+    if (!token) return json_({ proxyError: 'CONFIG' });
+    authorized = safeEquals_(given, token);
+  }
+  if (!authorized) return json_({ proxyError: 'AUTH' });
 
   // Uji cepat dari aplikasi: membuktikan URL, deploy, dan token benar tanpa memanggil Gemini
   // dan tanpa mengurangi batas harian.

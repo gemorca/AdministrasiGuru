@@ -1,24 +1,23 @@
 /**
  * Konfigurasi bersama untuk seluruh guru (diisi admin sekolah, sekali saja).
  *
- * Mode 1 - Multi-Guru Cloud (Tahap 7, disarankan untuk satu sekolah di Vercel + Supabase):
- *   Isi `supabaseUrl` dan `supabaseAnonKey` di bawah (serta env Vercel: GEMINI_API_KEY, SUPABASE_URL,
- *   SUPABASE_ANON_KEY, AI_DAILY_LIMIT). Bila `supabaseUrl` diisi:
- *     - Aplikasi mewajibkan Login Google dan memeriksa undangan guru di sekolah.
- *     - AI otomatis lewat `/api/gemini` di Vercel (tidak ada lagi token/rahasia di browser).
+ * Mode 1 - Multi-Guru dengan Login (disarankan): isi `sheetsUrl` dengan URL Web App Apps Script
+ *   (berakhiran /exec). Semua data (akun, kelas, siswa, nilai, dll.) tersimpan di Google Spreadsheet
+ *   sekolah. Aplikasi menampilkan halaman Masuk / Daftar. Lihat apps-script/PANDUAN.md.
+ *   AI Gemini memakai Web App yang sama dan otomatis memakai sesi login guru (tanpa token di browser).
  *
- * Mode 2 - Lokal Satu Pengguna (tanpa `supabaseUrl`):
- *   Data tersimpan di browser perangkat masing-masing, dan AI memakai proxy Apps Script di bawah.
+ * Mode 2 - Lokal Satu Pengguna: kosongkan `sheetsUrl`. Data tersimpan di browser masing-masing.
+ *   AI (opsional) memakai proxy Apps Script lewat `ai.proxyUrl` + `ai.token`.
+ *
+ * JANGAN menaruh API key Gemini atau APP_TOKEN rahasia di berkas ini bila situs dipublikasikan:
+ * berkas ini dapat dibaca siapa pun. Pada Mode 1 token tidak diperlukan.
  */
 window.APP_CONFIG = window.APP_CONFIG || {
-    // Aktifkan mode Cloud Multi-Guru dengan mengisi dua baris berikut (lihat supabase/PANDUAN.md):
-    // PENTING: Gunakan Publishable key (sb_publishable_...) atau anon public key (eyJ...), JANGAN gunakan Secret key (sb_secret_...)!
-    supabaseUrl: 'https://ulcnhluflppgavhrsrri.supabase.co',
-    supabaseAnonKey: 'sb_publishable_gHyRk4NNpzLKaCKoNMvesQ_U5NKIhwg',
+    sheetsUrl: 'https://script.google.com/macros/s/AKfycbwp6gOPZzHtDtccrsCq51SEghu9sgZXDirM0aavPXs6hVzHkeVvgb9yUVjhpSDI7krYjA/exec',
     ai: {
-        proxyUrl: 'https://script.google.com/macros/s/AKfycbzAgFnBR9o3l3bEQuz4iATRi9vPZxNNb1jH1idm3IeWkOTwBragJU_iYVD6L1hJMdae/exec',                  // URL Web App Apps Script, berakhiran /exec
-        token: 'mohamadagilnurekaputrasabdul2026',                     // sama dengan APP_TOKEN di Script Properties
-        model: 'gemini-3.6-flash',     // model bawaan untuk semua guru
-        fallbackModel: 'gemini-3.5-flash-lite'              // model cadangan bawaan (opsional)
+        proxyUrl: '',                       // kosong = pakai sheetsUrl (Mode 1)
+        token: '',                          // hanya untuk Mode 2
+        model: 'gemini-3.6-flash',          // model bawaan untuk semua guru
+        fallbackModel: 'gemini-3.5-flash-lite'  // model cadangan bawaan (opsional)
     }
 };

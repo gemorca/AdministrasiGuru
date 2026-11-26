@@ -11,10 +11,16 @@ const AIUI = (() => {
     function cfg() { return settings.ai; }
 
     // ---------- konfigurasi bersama (app-config.js) & mode cloud ----------
-    function isCloud() { return typeof Cloud !== 'undefined' && !!Cloud.enabled; }
-    function sharedCfg() { return (typeof window !== 'undefined' && window.APP_CONFIG && window.APP_CONFIG.ai) || {}; }
-    /** Tersedia konfigurasi bersama (URL proxy dan token terisi di app-config.js). */
-    function hasShared() { const m = sharedCfg(); return !!(m.proxyUrl && m.token); }
+    // Mode "cloud" lama (Supabase + /api/gemini) sudah dihapus. Login Spreadsheet memakai jalur proxy Apps Script.
+    function isCloud() { return false; }
+    function sessionMode() { return typeof Cloud !== 'undefined' && !!Cloud.enabled && typeof Auth !== 'undefined'; }
+    function sharedCfg() {
+        const c = (typeof window !== 'undefined' && window.APP_CONFIG) || {};
+        const a = c.ai || {};
+        return sessionMode() ? { ...a, proxyUrl: a.proxyUrl || c.sheetsUrl || '' } : a;
+    }
+    /** Tersedia konfigurasi bersama (URL proxy; token app-config ATAU sesi login Spreadsheet). */
+    function hasShared() { const m = sharedCfg(); return !!(m.proxyUrl && (m.token || sessionMode())); }
     /** Dipakai bila mode cloud aktif ATAU ada konfigurasi bersama dan guru tidak memilih pengaturan sendiri. */
     function isManaged() { return isCloud() || (hasShared() && !cfg().custom); }
     function effectiveConfig() {
@@ -28,7 +34,11 @@ const AIUI = (() => {
         return { ...c, mode: 'proxy', proxyUrl: m.proxyUrl,
             model: c.modelChosen ? c.model : (m.model || c.model), fallbackModel: c.modelChosen ? c.fallbackModel : (m.fallbackModel || c.fallbackModel) };
     }
-    function effectiveSecret() { return isCloud() ? '' : (isManaged() ? sharedCfg().token : Store.secretGet()); }
+    function effectiveSecret() {
+        if (isCloud()) return '';
+        if (!isManaged()) return Store.secretGet();
+        return sessionMode() && !sharedCfg().token ? 'session:' + Auth.sessionToken() : sharedCfg().token;
+    }
 
     // ---------- pilihan model ----------
     const MODEL_CHOICES = [

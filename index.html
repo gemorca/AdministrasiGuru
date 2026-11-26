@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistem Administrasi Guru Terpadu - Tahap 18</title>
-    <!-- Tailwind CSS CDN -->
-    <script src="vendor/tailwind.js" onerror="document.write('<script src=&quot;https://cdn.tailwindcss.com&quot;><\/script>')"></script>
+    <title>Sistem Administrasi Guru Terpadu</title>
+    <!-- CSS: Tailwind statis (hasil build) + gaya responsif mobile/tablet/desktop -->
+    <link rel="stylesheet" href="css/tailwind.css">
+    <link rel="stylesheet" href="css/style.css">
     <!-- Chart.js CDN -->
     <script src="vendor/chart.umd.js" onerror="document.write('<script src=&quot;https://cdn.jsdelivr.net/npm/chart.js&quot;><\/script>')"></script>
     <!-- Google Fonts: Inter -->
@@ -37,54 +38,85 @@
 </head>
 <body class="text-slate-800 flex h-screen overflow-hidden bg-slate-50">
 
-    <!-- GERBANG LOGIN & KONEKSI AWAL CLOUD (TAHAP 7 - Tersembunyi pada mode lokal) -->
-    <div id="authGate" class="fixed inset-0 bg-slate-900 z-[80] hidden flex items-center justify-center p-4 no-print">
-        <div class="bg-white rounded-2xl p-6 sm:p-8 w-full max-w-md shadow-2xl border border-slate-100 space-y-5">
+    <!-- GERBANG LOGIN / REGISTER (Backend Google Spreadsheet; tersembunyi pada mode lokal) -->
+    <div id="authGate" class="auth-gate fixed inset-0 z-[80] hidden flex items-center justify-center p-4 no-print overflow-y-auto">
+        <div class="auth-card bg-white rounded-2xl p-5 sm:p-8 w-full max-w-md shadow-2xl border border-slate-100 space-y-5 my-auto">
             <div class="flex items-center gap-3 border-b border-slate-100 pb-4">
                 <div class="bg-blue-600 text-white p-3 rounded-xl text-2xl shadow">👨‍🏫</div>
                 <div>
                     <h1 class="font-bold text-lg text-slate-800 leading-tight">Sistem Administrasi Guru</h1>
-                    <p class="text-xs text-slate-500 font-medium">Ruang Kerja Terpadu Sekolah</p>
+                    <p class="text-xs text-slate-500 font-medium">Ruang Kerja Terpadu Sekolah <span id="authSchoolLabel" class="text-blue-600 font-semibold"></span></p>
                 </div>
             </div>
 
             <!-- Panel: Memuat -->
             <div id="authPanelLoading" class="py-6 text-center space-y-3">
                 <div class="text-3xl animate-pulse">🔄</div>
-                <p id="authLoadingText" class="text-sm font-semibold text-slate-700">Menghubungkan ke server sekolah...</p>
+                <p id="authLoadingText" class="text-sm font-semibold text-slate-700">Menghubungkan ke Spreadsheet sekolah...</p>
             </div>
 
-            <!-- Panel: Masuk dengan Google -->
-            <div id="authPanelLogin" class="hidden space-y-4">
-                <p class="text-sm text-slate-600 leading-relaxed">Silakan masuk menggunakan akun Google yang telah diundang oleh Admin Sekolah Anda.</p>
+            <!-- Panel: Masuk -->
+            <form id="authPanelLogin" class="hidden space-y-4" onsubmit="Auth.submitLogin(event)" autocomplete="on">
+                <h2 class="font-bold text-slate-800">Masuk</h2>
                 <div id="authLoginError" class="hidden text-xs bg-red-50 text-red-700 border border-red-200 rounded-xl p-3"></div>
-                <button type="button" id="btnGoogleLogin" onclick="Auth.loginGoogle()" class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm shadow transition flex items-center justify-center gap-2">
-                    <span>🔐</span> Masuk dengan Google
-                </button>
-                <p class="text-[11px] text-slate-400 text-center">Hanya guru yang terdaftar pada daftar undangan sekolah yang dapat mengakses data.</p>
-            </div>
+                <div class="space-y-1">
+                    <label for="loginEmail" class="text-xs font-bold text-slate-600">Email</label>
+                    <input type="email" id="loginEmail" autocomplete="username" required placeholder="nama@email.com" class="auth-input w-full border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm">
+                </div>
+                <div class="space-y-1">
+                    <label for="loginPassword" class="text-xs font-bold text-slate-600">Kata Sandi</label>
+                    <div class="relative">
+                        <input type="password" id="loginPassword" autocomplete="current-password" required class="auth-input w-full border border-slate-200 pl-3.5 pr-24 py-2.5 rounded-xl text-sm">
+                        <button type="button" onclick="Auth.togglePassword('loginPassword', this)" class="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-bold text-blue-600 px-2 py-1">Tampilkan</button>
+                    </div>
+                </div>
+                <button type="submit" id="btnLogin" class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm shadow transition">Masuk</button>
+                <p class="text-xs text-slate-500 text-center">Belum punya akun? <button type="button" onclick="Auth.showRegister()" class="font-bold text-blue-600 hover:underline">Daftar di sini</button></p>
+            </form>
 
-            <!-- Panel: Ditolak (Belum Diundang) -->
-            <div id="authPanelDenied" class="hidden space-y-4">
-                <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2 text-xs text-amber-900">
-                    <p class="font-bold text-sm">🔒 Akun Belum Diundang</p>
-                    <p>Email <b id="authDeniedEmail" class="underline"></b> belum terdaftar di sekolah ini.</p>
-                    <p>Minta <b>Admin Sekolah</b> menambahkan alamat email tersebut melalui menu <b>Pengaturan &gt; Tim &amp; Undangan Guru</b>, lalu tekan Coba Lagi.</p>
+            <!-- Panel: Daftar -->
+            <form id="authPanelRegister" class="hidden space-y-3" onsubmit="Auth.submitRegister(event)" autocomplete="on">
+                <h2 class="font-bold text-slate-800">Daftar Akun Baru</h2>
+                <div id="regFirstNote" class="hidden text-xs bg-blue-50 text-blue-800 border border-blue-200 rounded-xl p-3">Belum ada akun di Spreadsheet ini. Anda pendaftar pertama dan otomatis menjadi <b>Admin Sekolah</b>.</div>
+                <div id="authRegError" class="hidden text-xs bg-red-50 text-red-700 border border-red-200 rounded-xl p-3"></div>
+                <div class="space-y-1">
+                    <label for="regName" class="text-xs font-bold text-slate-600">Nama Lengkap</label>
+                    <input type="text" id="regName" autocomplete="name" required maxlength="80" class="auth-input w-full border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm">
                 </div>
-                <div class="flex gap-2">
-                    <button type="button" id="btnRetryGate" onclick="Auth.retryGate()" class="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold shadow hover:bg-blue-700 transition">Coba Lagi</button>
-                    <button type="button" id="btnDeniedLogout" onclick="Auth.signOutFromGate()" class="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200 transition">Ganti Akun</button>
+                <div id="regSchoolRow" class="hidden space-y-1">
+                    <label for="regSchool" class="text-xs font-bold text-slate-600">Nama Sekolah</label>
+                    <input type="text" id="regSchool" maxlength="120" placeholder="contoh: SMP Negeri 1 Talaga Jaya" class="auth-input w-full border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm">
                 </div>
-            </div>
+                <div class="space-y-1">
+                    <label for="regEmail" class="text-xs font-bold text-slate-600">Email</label>
+                    <input type="email" id="regEmail" autocomplete="email" required class="auth-input w-full border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm">
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div class="space-y-1">
+                        <label for="regPassword" class="text-xs font-bold text-slate-600">Kata Sandi (min. 8)</label>
+                        <input type="password" id="regPassword" autocomplete="new-password" required minlength="8" class="auth-input w-full border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm">
+                    </div>
+                    <div class="space-y-1">
+                        <label for="regPassword2" class="text-xs font-bold text-slate-600">Ulangi Kata Sandi</label>
+                        <input type="password" id="regPassword2" autocomplete="new-password" required minlength="8" class="auth-input w-full border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm">
+                    </div>
+                </div>
+                <div id="regCodeRow" class="hidden space-y-1">
+                    <label for="regCode" class="text-xs font-bold text-slate-600">Kode Pendaftaran Sekolah</label>
+                    <input type="text" id="regCode" autocomplete="off" placeholder="Minta ke Admin Sekolah" class="auth-input w-full border border-slate-200 px-3.5 py-2.5 rounded-xl text-sm">
+                </div>
+                <button type="submit" id="btnRegister" class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm shadow transition">Daftar</button>
+                <p class="text-xs text-slate-500 text-center">Sudah punya akun? <button type="button" onclick="Auth.showLogin()" class="font-bold text-blue-600 hover:underline">Masuk</button></p>
+            </form>
 
             <!-- Panel: Peringatan Ganti Akun di Perangkat yang Sama -->
             <div id="authPanelSwitch" class="hidden space-y-4">
                 <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2 text-xs text-amber-900">
                     <p class="font-bold text-sm">⚠️ Pergantian Akun di Perangkat Ini</p>
                     <p>Browser ini sebelumnya dipakai oleh <b id="authSwitchPrevEmail"></b>. Anda sekarang masuk sebagai <b id="authSwitchNextEmail"></b>.</p>
-                    <p>Untuk menjaga privasi antar guru, salinan data lokal akun sebelumnya di browser ini akan dihapus sebelum memuat data akun Anda (data akun sebelumnya yang sudah tersinkron di server tetap aman).</p>
+                    <p>Untuk menjaga privasi antar guru, salinan data lokal akun sebelumnya di browser ini akan dihapus sebelum memuat data akun Anda (data akun sebelumnya yang sudah tersinkron di Spreadsheet tetap aman).</p>
                 </div>
-                <div class="flex gap-2">
+                <div class="flex flex-col sm:flex-row gap-2">
                     <button type="button" id="btnCancelSwitch" onclick="Auth.chooseDecision('cancel')" class="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200 transition">Batal &amp; Keluar</button>
                     <button type="button" id="btnConfirmSwitch" onclick="Auth.chooseDecision('wipe_and_continue')" class="flex-1 py-2.5 bg-red-600 text-white rounded-xl text-xs font-bold shadow hover:bg-red-700 transition">Bersihkan &amp; Lanjut</button>
                 </div>
@@ -98,7 +130,7 @@
                 </div>
                 <div class="space-y-2">
                     <button type="button" id="btnUploadLocal" onclick="Auth.chooseDecision('upload')" class="w-full py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold shadow hover:bg-blue-700 transition">Unggah Data Lokal ke Akun Sekolah</button>
-                    <button type="button" id="btnSkipLocal" onclick="Auth.chooseDecision('skip')" class="w-full py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200 transition">Jangan Unggah (Pakai Data Server Saja)</button>
+                    <button type="button" id="btnSkipLocal" onclick="Auth.chooseDecision('skip')" class="w-full py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200 transition">Jangan Unggah (Pakai Data Spreadsheet Saja)</button>
                     <button type="button" onclick="Auth.chooseDecision('cancel')" class="w-full py-2 text-slate-400 hover:text-slate-600 text-xs font-semibold">Batal &amp; Keluar</button>
                 </div>
             </div>
@@ -384,6 +416,7 @@
     </div>
 
     <!-- SIDEBAR -->
+    <div id="sidebarOverlay" class="sidebar-overlay no-print" onclick="closeSidebar()"></div>
     <aside id="sidebar" class="w-64 bg-slate-900 text-white flex flex-col hidden md:flex h-full shadow-xl z-20 transition-all duration-300 flex-shrink-0">
         <div class="p-5 flex items-center gap-3 border-b border-slate-800">
             <div class="bg-blue-600 p-2.5 rounded-xl text-xl shadow-lg">👨‍🏫</div>
@@ -391,6 +424,7 @@
                 <h1 class="font-bold text-base leading-tight">Admin Guru</h1>
                 <p id="sidePeriodName" class="text-xs text-blue-400 font-semibold mt-0.5">Memuat...</p>
             </div>
+            <button type="button" class="md:hidden ml-auto text-slate-400 hover:text-white text-xl px-2" onclick="closeSidebar()" aria-label="Tutup menu">✕</button>
         </div>
         <nav class="flex-1 overflow-y-auto py-4 px-3 space-y-1" id="navMenu">
             <!-- Navigation items generated by JS -->
@@ -406,13 +440,13 @@
         <!-- HEADER -->
         <header class="bg-white shadow-sm border-b border-slate-200 px-4 sm:px-6 py-3 flex justify-between items-center z-10 flex-shrink-0">
             <div class="flex items-center gap-4">
-                <button class="md:hidden text-slate-500 hover:text-slate-800 text-2xl font-bold" onclick="document.getElementById('sidebar').classList.toggle('hidden')">☰</button>
+                <button class="md:hidden text-slate-500 hover:text-slate-800 text-2xl font-bold" onclick="toggleSidebar()" aria-label="Buka menu">☰</button>
                 <div>
                     <h2 id="headerSchool" class="font-bold text-slate-800 text-base sm:text-lg leading-none">SMP Negeri 1 Talaga Jaya</h2>
                     <p id="headerInfo" class="text-xs text-slate-500 font-medium mt-1">Memuat Data...</p>
                 </div>
             </div>
-            <div class="flex items-center gap-3">
+            <div class="header-tools flex items-center gap-2 sm:gap-3 flex-wrap justify-end min-w-0">
                 <div class="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
                     <span class="text-xs font-bold text-slate-500">Kelas:</span>
                     <select id="globalClassSelector" class="bg-transparent text-xs font-bold text-blue-700 focus:outline-none cursor-pointer" onchange="changeGlobalClass(this.value)">
@@ -1812,25 +1846,25 @@
                 <div id="adminTeamCard" data-admin-only class="hidden bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4 max-w-3xl mt-6">
                     <div class="border-b pb-2 flex items-center justify-between gap-2 flex-wrap">
                         <div>
-                            <h4 class="font-bold text-slate-800">👥 Tim &amp; Undangan Guru Sekolah</h4>
-                            <p class="text-xs text-slate-500">Tambahkan email akun Google guru agar dapat masuk dan berbagi daftar kelas serta siswa sekolah.</p>
+                            <h4 class="font-bold text-slate-800">👥 Anggota Sekolah</h4>
+                            <p class="text-xs text-slate-500">Guru mendaftar sendiri di halaman login. Di sini Anda bisa menentukan peran email tertentu lebih dulu, mereset kata sandi, atau mengeluarkan anggota.</p>
                         </div>
                         <button type="button" onclick="Auth.loadAdminTeam()" class="text-xs font-bold text-blue-600 hover:text-blue-800 px-3 py-1.5 rounded-lg bg-blue-50">Muat Ulang</button>
                     </div>
 
                     <form id="formInviteTeacher" onsubmit="Auth.inviteTeacher(event)" class="flex flex-col sm:flex-row gap-2">
-                        <input type="email" id="inviteEmail" placeholder="Email Google guru (contoh: budi@gmail.com)" class="flex-1 border border-slate-200 px-3.5 py-2 rounded-xl text-sm" required>
+                        <input type="email" id="inviteEmail" placeholder="Email guru (contoh: budi@gmail.com)" class="flex-1 border border-slate-200 px-3.5 py-2 rounded-xl text-sm" required>
                         <select id="inviteRole" class="border border-slate-200 px-3 py-2 rounded-xl text-sm font-semibold">
                             <option value="teacher">Guru Mapel</option>
                             <option value="admin">Admin Sekolah</option>
                         </select>
-                        <button type="submit" id="btnInviteTeacher" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold shadow transition">+ Undang Guru</button>
+                        <button type="submit" id="btnInviteTeacher" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold shadow transition">+ Tetapkan Peran</button>
                     </form>
 
                     <div id="adminTeamMsg" class="hidden"></div>
 
                     <div class="space-y-2">
-                        <h5 class="text-xs font-bold uppercase tracking-wider text-slate-500">Undangan Menunggu Klaim</h5>
+                        <h5 class="text-xs font-bold uppercase tracking-wider text-slate-500">Peran Menunggu Pendaftaran</h5>
                         <div id="adminInviteList" class="space-y-2"></div>
                     </div>
 
@@ -1841,6 +1875,17 @@
                 </div>
             </div>
 
+            <!-- UBAH KATA SANDI (semua pengguna yang sedang login) -->
+            <div id="changePwCard" class="hidden bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-100 space-y-4 max-w-3xl mt-6">
+                <h4 class="font-bold text-slate-800 border-b pb-2">🔑 Ubah Kata Sandi</h4>
+                <form onsubmit="Auth.changePassword(event)" class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <input type="password" id="cpOld" autocomplete="current-password" placeholder="Kata sandi lama" class="border border-slate-200 px-3.5 py-2 rounded-xl text-sm" required>
+                    <input type="password" id="cpNew" autocomplete="new-password" placeholder="Kata sandi baru (min. 8)" minlength="8" class="border border-slate-200 px-3.5 py-2 rounded-xl text-sm" required>
+                    <input type="password" id="cpNew2" autocomplete="new-password" placeholder="Ulangi kata sandi baru" minlength="8" class="border border-slate-200 px-3.5 py-2 rounded-xl text-sm" required>
+                    <div class="md:col-span-3"><button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-xl text-sm font-bold shadow transition">Simpan Kata Sandi</button></div>
+                </form>
+                <div id="cpMsg" class="text-xs"></div>
+            </div>
         </main>
     </div>
 
@@ -2336,7 +2381,7 @@
     <script src="js/domain/package.js"></script>
     <script src="js/domain/sync.js"></script>
     <script src="js/core/sync.js"></script>
-    <script src="js/core/remote-supabase.js"></script>
+    <script src="js/core/remote-sheets.js"></script>
     <script src="js/ai/schema.js"></script>
     <script src="js/ai/anonymizer.js"></script>
     <script src="js/ai/prompts.js"></script>

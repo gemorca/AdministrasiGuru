@@ -1,0 +1,80 @@
+/* Gaya tambahan & responsif (mobile < 768px, tablet 768-1023px, desktop >= 1024px).
+   Dimuat SETELAH css/tailwind.css. Selektor memakai #id / html body agar menang atas utilitas Tailwind. */
+
+:root { --sidebar-w: 16rem; }
+html, body { -webkit-text-size-adjust: 100%; }
+body { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; }
+img, canvas, video { max-width: 100%; }
+button, [role="button"], select { touch-action: manipulation; }
+
+/* ---------- Gerbang login ---------- */
+.auth-gate { background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 55%, #2563eb 100%); }
+.auth-card { animation: authIn .35s ease-out; }
+@keyframes authIn { from { opacity: 0; transform: translateY(12px) scale(.98); } to { opacity: 1; transform: none; } }
+.auth-input { background: #fff; transition: border-color .15s, box-shadow .15s; }
+.auth-input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, .18); }
+/* 16px mencegah iOS memperbesar layar saat input difokuskan */
+.auth-input, #authGate input { font-size: 16px; }
+
+/* ---------- Modal: selalu bisa discroll bila lebih tinggi dari layar ---------- */
+[id^="modal"] > form, [id^="modal"] > div { max-height: 92vh; overflow-y: auto; }
+
+/* ---------- Overlay sidebar (hanya dipakai di mobile) ---------- */
+.sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, .55); z-index: 65; opacity: 0; transition: opacity .25s; }
+
+/* ---------- Mobile (< 768px) ---------- */
+@media screen and (max-width: 767px) {
+    html body #sidebar {
+        display: flex !important;
+        position: fixed; top: 0; bottom: 0; left: 0;
+        width: min(17rem, 85vw);
+        z-index: 70;
+        transform: translateX(-105%);
+        transition: transform .28s ease;
+        box-shadow: none;
+    }
+    html body #sidebar.open { transform: none; box-shadow: 0 0 40px rgba(0, 0, 0, .45); }
+    .sidebar-overlay.open { display: block; opacity: 1; }
+    body.sidebar-open { overflow: hidden; }
+
+    html body header { padding-left: .75rem; padding-right: .75rem; gap: .5rem; flex-wrap: wrap; }
+    html body header #headerSchool { max-width: 55vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    html body header #headerInfo { max-width: 55vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    html body main { padding: .75rem; }
+
+    /* Grid tanpa varian responsif diperkecil agar muat */
+    html body .grid-cols-3, html body .grid-cols-4, html body .grid-cols-5, html body .grid-cols-6 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    html body .col-span-2, html body .col-span-3, html body .col-span-4 { grid-column: 1 / -1; }
+
+    /* Tabel bisa digeser ke samping, tidak memecah layout halaman */
+    html body main table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; white-space: nowrap; }
+
+    /* Target sentuh nyaman */
+    html body main button, html body main select, html body main input:not([type="checkbox"]):not([type="radio"]) { min-height: 40px; }
+    html body main input, html body main select, html body main textarea { font-size: 16px; }
+    html body .max-w-3xl, html body .max-w-4xl, html body .max-w-5xl { max-width: 100%; }
+}
+
+/* ---------- Tablet (768px - 1023px) ---------- */
+@media screen and (min-width: 768px) and (max-width: 1023px) {
+    html body #sidebar { width: 14rem; }
+    html body main { padding: 1rem; }
+    html body .grid-cols-5, html body .grid-cols-6 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    html body main table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}
+
+/* ---------- Desktop lebar ---------- */
+@media screen and (min-width: 1280px) {
+    html body main { padding: 1.5rem 2rem; }
+}
+
+/* Hormati preferensi kurangi gerak */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+
+/* Cetak: jangan terkena aturan responsif */
+@media print {
+    .sidebar-overlay, .auth-gate { display: none !important; }
+    html body main table { display: table !important; overflow: visible !important; white-space: normal !important; }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "administrasi-guru",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build:css": "tailwindcss -i css/tailwind.src.css -o css/tailwind.css --minify",
+    "test": "node --test tests/unit/*.test.js"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}

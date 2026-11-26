@@ -1,8 +1,9 @@
 /**
- * Gerbang autentikasi, status Cloud, alur koneksi pertama / ganti akun, status sinkronisasi header,
- * pembatasan antarmuka berdasarkan peran (Admin vs Guru), dan manajemen undangan guru.
+ * Gerbang login/register, status Cloud, alur koneksi pertama / ganti akun, status sinkronisasi header,
+ * pembatasan antarmuka berdasarkan peran (Admin vs Guru), dan manajemen anggota sekolah.
  *
- * Hanya aktif bila `APP_CONFIG.supabaseUrl` terisi. Tanpa itu, `Cloud.enabled === false` dan
+ * Backend: Google Spreadsheet lewat Apps Script (js/core/remote-sheets.js).
+ * Aktif bila `APP_CONFIG.sheetsUrl` terisi. Tanpa itu, `Cloud.enabled === false` dan
  * `Cloud.isAdmin() === true` sehingga mode lokal satu pengguna berjalan persis seperti semula.
  */
 const Cloud = {
@@ -19,23 +20,33 @@ const Cloud = {
 const Auth = (() => {
     const $ = id => document.getElementById(id);
     const META_ACCOUNT = 'sync_account';
+    const REASONS = {
+        BAD_CREDENTIALS: 'Email atau kata sandi salah.',
+        LOCKED: 'Terlalu banyak percobaan gagal. Coba lagi dalam 15 menit.',
+        EMAIL_EXISTS: 'Email tersebut sudah terdaftar. Silakan masuk.',
+        EMAIL_INVALID: 'Format email tidak valid.',
+        NAME_REQUIRED: 'Nama lengkap wajib diisi.',
+        PASSWORD_WEAK: 'Kata sandi minimal 8 karakter.',
+        SCHOOL_REQUIRED: 'Nama sekolah wajib diisi oleh pendaftar pertama.',
+        BAD_CODE: 'Kode pendaftaran sekolah salah.'
+    };
 
     let remote = null;
-    let unsubAuth = null;
     let unsubSync = null;
     let appInitialized = false;
     let bootingSession = false;
     let pendingDecision = null; // resolver Promise untuk konfirmasi ganti akun / unggah data lokal
+    let regStatus = { hasUsers: true, needsCode: false, schoolName: '' };
 
     function isCloudConfigured() {
-        return !!(typeof window !== 'undefined' && window.APP_CONFIG && String(window.APP_CONFIG.supabaseUrl || '').trim());
+        return !!(typeof window !== 'undefined' && window.APP_CONFIG && String(window.APP_CONFIG.sheetsUrl || '').trim());
     }
 
     function showGatePanel(panelId) {
         const gate = $('authGate');
         if (!gate) return;
         gate.classList.remove('hidden');
-        ['authPanelLoading', 'authPanelLogin', 'authPanelDenied', 'authPanelSwitch', 'authPanelFirstSync', 'authPanelError'].forEach(id => {
+        ['authPanelLoading', 'authPanelLogin', 'authPanelRegister', 'authPanelSwitch', 'authPanelFirstSync', 'authPanelError'].forEach(id => {
             const el = $(id);
             if (el) el.classList.toggle('hidden', id !== panelId);
         });
@@ -49,13 +60,20 @@ const Auth = (() => {
     function setLoadingText(txt) {
         showGatePanel('authPanelLoading');
         const el = $('authLoadingText');
-        if (el) el.innerText = txt || 'Menghubungkan ke server sekolah...';
+        if (el) el.innerText = txt || 'Menghubungkan ke Spreadsheet sekolah...';
     }
 
     function showGateError(message) {
         showGatePanel('authPanelError');
         const el = $('authErrorText');
-        if (el) el.innerText = message || 'Gagal terhubung ke layanan sekolah.';
+        if (el) el.innerText = message || 'Gagal terhubung ke Spreadsheet sekolah.';
+    }
+
+    function formMsg(id, text) {
+        const el = $(id);
+        if (!el) return;
+        el.innerText = text || '';
+        el.classList.toggle('hidden', !text);
     }
 
     function hasPreExistingLocalData() {
@@ -79,25 +97,61 @@ const Auth = (() => {
         res(choice);
     }
 
+    // ---------- tampilan form ----------
+    async function refreshRegStatus() {
+        try {
+            const s = await remote.status();
+            if (s && s.ok) regStatus = s;
+        } catch (_) { /* biarkan bawaan; server akan menolak bila perlu */ }
+        const codeRow = $('regCodeRow');
+        if (codeRow) codeRow.classList.toggle('hidden', !regStatus.needsCode || !regStatus.hasUsers);
+        const schoolRow = $('regSchoolRow');
+        if (schoolRow) schoolRow.classList.toggle('hidden', !!regStatus.hasUsers);
+        const note = $('regFirstNote');
+        if (note) note.classList.toggle('hidden', !!regStatus.hasUsers);
+        const school = $('authSchoolLabel');
+        if (school) school.innerText = regStatus.schoolName || '';
+    }
+
+    function showLogin() {
+        formMsg('authLoginError', '');
+        showGatePanel('authPanelLogin');
+        const el = $('loginEmail');
+        if (el) el.focus();
+    }
+
+    async function showRegister() {
+        formMsg('authRegError', '');
+        showGatePanel('authPanelRegister');
+        await refreshRegStatus();
+    }
+
+    function togglePassword(inputId, btn) {
+        const el = $(inputId);
+        if (!el) return;
+        const show = el.type === 'password';
+        el.type = show ? 'text' : 'password';
+        if (btn) btn.innerText = show ? 'Sembunyikan' : 'Tampilkan';
+    }
+
+    // ---------- alur utama ----------
     async function boot() {
         Cloud.enabled = isCloudConfigured();
         if (!Cloud.enabled) return false;
 
         setLoadingText('Menyiapkan koneksi sekolah...');
         try {
-            remote = await RemoteSupabase.init(window.APP_CONFIG);
+            remote = await RemoteSheets.init(window.APP_CONFIG);
         } catch (e) {
             showGateError(e && e.message ? e.message : String(e));
             return true;
         }
 
-        if (unsubAuth) { unsubAuth(); unsubAuth = null; }
-        if (typeof remote.onAuthStateChange === 'function') {
-            unsubAuth = remote.onAuthStateChange((event, session) => {
-                if (session && !Cloud.ready && !bootingSession) {
-                    processAuthenticatedSession(session).catch(err => showGateError(err && err.message ? err.message : String(err)));
-                } else if (event === 'SIGNED_OUT' && Cloud.ready) {
+        if (typeof remote.onAuthLost === 'function') {
+            remote.onAuthLost(() => {
+                if (Cloud.ready) {
                     handleSignedOutState();
+                    formMsg('authLoginError', 'Sesi Anda berakhir. Silakan masuk kembali.');
                 }
             });
         }
@@ -111,7 +165,8 @@ const Auth = (() => {
         }
 
         if (!session) {
-            showGatePanel('authPanelLogin');
+            showLogin();
+            refreshRegStatus();
             return true;
         }
 
@@ -119,26 +174,58 @@ const Auth = (() => {
         return true;
     }
 
-    async function loginGoogle() {
+    async function submitLogin(e) {
+        if (e) e.preventDefault();
         if (!remote) return;
-        const btn = $('btnGoogleLogin');
-        const errBox = $('authLoginError');
-        if (errBox) { errBox.classList.add('hidden'); errBox.innerText = ''; }
-        if (btn) { btn.disabled = true; btn.innerText = 'Mengarahkan ke Google...'; }
+        const email = ($('loginEmail').value || '').trim();
+        const pw = $('loginPassword').value || '';
+        const btn = $('btnLogin');
+        formMsg('authLoginError', '');
+        if (!email || !pw) { formMsg('authLoginError', 'Isi email dan kata sandi.'); return; }
+        if (btn) { btn.disabled = true; btn.innerText = 'Memeriksa...'; }
         try {
-            await remote.signInWithGoogle();
-            // Bila adaptor tiruan langsung mengisi sesi tanpa redirect halaman, lanjutkan otomatis:
-            const session = await remote.getSession();
-            if (session && !Cloud.ready && !bootingSession) {
-                await processAuthenticatedSession(session);
+            const res = await remote.login(email, pw);
+            if (!res || !res.ok) {
+                formMsg('authLoginError', REASONS[res && res.reason] || 'Gagal masuk.');
+                return;
             }
-        } catch (e) {
-            if (errBox) {
-                errBox.innerText = (e && e.message) ? e.message : 'Gagal masuk dengan Google.';
-                errBox.classList.remove('hidden');
-            }
+            $('loginPassword').value = '';
+            await processAuthenticatedSession(res.session);
+        } catch (err) {
+            formMsg('authLoginError', err && err.message ? err.message : 'Gagal masuk.');
         } finally {
-            if (btn) { btn.disabled = false; btn.innerText = 'Masuk dengan Google'; }
+            if (btn) { btn.disabled = false; btn.innerText = 'Masuk'; }
+        }
+    }
+
+    async function submitRegister(e) {
+        if (e) e.preventDefault();
+        if (!remote) return;
+        const name = ($('regName').value || '').trim();
+        const email = ($('regEmail').value || '').trim();
+        const pw = $('regPassword').value || '';
+        const pw2 = $('regPassword2').value || '';
+        const btn = $('btnRegister');
+        formMsg('authRegError', '');
+        if (pw.length < 8) { formMsg('authRegError', REASONS.PASSWORD_WEAK); return; }
+        if (pw !== pw2) { formMsg('authRegError', 'Konfirmasi kata sandi tidak sama.'); return; }
+        if (btn) { btn.disabled = true; btn.innerText = 'Mendaftarkan...'; }
+        try {
+            const res = await remote.register({
+                name, email, password: pw,
+                code: ($('regCode').value || '').trim(),
+                school: ($('regSchool').value || '').trim()
+            });
+            if (!res || !res.ok) {
+                formMsg('authRegError', REASONS[res && res.reason] || 'Pendaftaran gagal.');
+                return;
+            }
+            $('regPassword').value = ''; $('regPassword2').value = '';
+            await processAuthenticatedSession(res.session);
+        } catch (err) {
+            formMsg('authRegError', err && err.message ? err.message : 'Pendaftaran gagal.');
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerText = 'Daftar'; }
         }
     }
 
@@ -146,7 +233,7 @@ const Auth = (() => {
         if (!remote) { await boot(); return; }
         try {
             const session = await remote.getSession();
-            if (!session) { showGatePanel('authPanelLogin'); return; }
+            if (!session) { showLogin(); return; }
             await processAuthenticatedSession(session);
         } catch (e) {
             showGateError(e && e.message ? e.message : String(e));
@@ -165,33 +252,22 @@ const Auth = (() => {
         Cloud.role = null;
         Cloud.user = null;
         Cloud.school = null;
-        showGatePanel('authPanelLogin');
+        showLogin();
+        refreshRegStatus();
     }
 
     async function processAuthenticatedSession(session) {
         if (bootingSession) return;
         bootingSession = true;
         try {
-            setLoadingText('Memeriksa keanggotaan sekolah...');
-            const claim = await remote.claimInvite();
-            if (!claim || !claim.ok) {
-                const deniedEmail = (claim && claim.email) || (session.user && session.user.email) || '';
-                const elEmail = $('authDeniedEmail');
-                if (elEmail) elEmail.innerText = deniedEmail;
-                showGatePanel('authPanelDenied');
-                return;
-            }
-
+            setLoadingText('Memuat akun Anda...');
             Cloud.user = {
-                id: claim.user_id || session.user.id,
-                email: claim.email || session.user.email || '',
-                name: claim.name || session.user.name || ''
+                id: session.user.id,
+                email: session.user.email || '',
+                name: session.user.name || ''
             };
-            Cloud.school = {
-                id: claim.school_id,
-                name: claim.school_name || ''
-            };
-            Cloud.role = claim.role === 'admin' ? 'admin' : 'teacher';
+            Cloud.school = { id: (session.school && session.school.id) || 'sekolah', name: (session.school && session.school.name) || '' };
+            Cloud.role = session.role === 'admin' ? 'admin' : 'teacher';
 
             const prevAccount = Store.metaGet(META_ACCOUNT, null);
 
@@ -214,8 +290,8 @@ const Auth = (() => {
                 const descEl = $('authFirstSyncDesc');
                 if (descEl) {
                     descEl.innerText = Cloud.isAdmin()
-                        ? 'Ditemukan data lokal di browser ini. Sebagai Admin Sekolah, memilih "Unggah Data Lokal" akan mengunggah seluruh data sekolah (periode, kelas, peserta didik) serta perangkat ajar dan nilai Anda ke server sekolah.'
-                        : 'Ditemukan data lokal di browser ini. Sebagai Guru Mata Pelajaran, memilih "Unggah Data Lokal" hanya akan mengunggah data milik guru (perangkat ajar, bank soal, absensi, nilai, jurnal, dll.), sedangkan daftar periode, kelas, dan siswa diambil dari server sekolah.';
+                        ? 'Ditemukan data lokal di browser ini. Sebagai Admin Sekolah, memilih "Unggah Data Lokal" akan mengunggah seluruh data sekolah (periode, kelas, peserta didik) serta perangkat ajar dan nilai Anda ke Spreadsheet sekolah.'
+                        : 'Ditemukan data lokal di browser ini. Sebagai Guru Mata Pelajaran, memilih "Unggah Data Lokal" hanya akan mengunggah data milik guru (perangkat ajar, bank soal, absensi, nilai, jurnal, dll.), sedangkan daftar periode, kelas, dan siswa diambil dari data sekolah.';
                 }
                 showGatePanel('authPanelFirstSync');
                 const choice = await waitDecision();
@@ -278,6 +354,8 @@ const Auth = (() => {
                 onRemoteApplied: handleRemoteApplied
             });
             renderSyncBadge(Sync.status());
+        } catch (err) {
+            showGateError(err && err.message ? err.message : String(err));
         } finally {
             bootingSession = false;
         }
@@ -306,6 +384,44 @@ const Auth = (() => {
         if (setNote) setNote.classList.toggle('hidden', !Cloud.enabled || admin);
         const teamCard = $('adminTeamCard');
         if (teamCard) teamCard.classList.toggle('hidden', !(Cloud.enabled && admin));
+        const pwCard = $('changePwCard');
+        if (pwCard) pwCard.classList.toggle('hidden', !(Cloud.enabled && Cloud.ready));
+    }
+
+    async function changePassword(e) {
+        if (e) e.preventDefault();
+        if (!Cloud.enabled || !remote) return;
+        const oldPw = $('cpOld').value || '';
+        const newPw = $('cpNew').value || '';
+        const newPw2 = $('cpNew2').value || '';
+        const msg = $('cpMsg');
+        const show = (t, err) => {
+            msg.innerText = t;
+            msg.className = 'text-xs rounded-xl p-3 border ' + (err ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200');
+        };
+        if (newPw.length < 8) { show(REASONS.PASSWORD_WEAK, true); return; }
+        if (newPw !== newPw2) { show('Konfirmasi kata sandi baru tidak sama.', true); return; }
+        try {
+            const res = await remote.changePassword(oldPw, newPw);
+            if (!res || !res.ok) { show(res && res.reason === 'BAD_CREDENTIALS' ? 'Kata sandi lama salah.' : (REASONS[res && res.reason] || 'Gagal mengubah kata sandi.'), true); return; }
+            $('cpOld').value = ''; $('cpNew').value = ''; $('cpNew2').value = '';
+            show('Kata sandi berhasil diubah.', false);
+        } catch (err) {
+            show(err && err.message ? err.message : 'Gagal mengubah kata sandi.', true);
+        }
+    }
+
+    function resetMemberPassword(userId, email) {
+        if (!Cloud.enabled || !Cloud.isAdmin() || !remote) return;
+        showConfirm(`Buat kata sandi sementara untuk ${email}? Kata sandi lama tidak berlaku dan guru tersebut akan keluar dari semua perangkat.`, async () => {
+            try {
+                const res = await remote.resetMemberPassword(userId);
+                if (!res || !res.ok) { teamMsg('Gagal mereset kata sandi.', true); return; }
+                teamMsg(`Kata sandi sementara untuk ${email}: ${res.tempPassword} (sampaikan ke guru dan minta segera diganti di Pengaturan).`, false);
+            } catch (err) {
+                teamMsg('Gagal mereset kata sandi: ' + (err && err.message ? err.message : err), true);
+            }
+        });
     }
 
     function renderHeader() {
@@ -453,6 +569,7 @@ const Auth = (() => {
                             <span class="px-2.5 py-1 rounded-full font-bold ${m.role === 'admin' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-200 text-slate-700'}">${m.role === 'admin' ? 'Admin' : 'Guru'}</span>
                             ${isSelf ? '' : `
                                 <button type="button" onclick="Auth.changeMemberRole('${esc(m.user_id)}', '${nextRole}')" class="px-2.5 py-1 rounded-lg font-bold bg-white border border-slate-300 text-slate-700 hover:bg-slate-100">${nextLabel}</button>
+                                <button type="button" onclick="Auth.resetMemberPassword('${esc(m.user_id)}', '${esc(m.email)}')" class="px-2.5 py-1 rounded-lg font-bold bg-white border border-amber-300 text-amber-700 hover:bg-amber-50">Reset Sandi</button>
                                 <button type="button" onclick="Auth.removeMember('${esc(m.user_id)}', '${esc(m.email)}')" class="px-2.5 py-1 rounded-lg font-bold bg-red-50 border border-red-200 text-red-600 hover:bg-red-100">Keluarkan</button>
                             `}
                         </div>
@@ -485,7 +602,7 @@ const Auth = (() => {
                 return;
             }
             if (emailEl) emailEl.value = '';
-            teamMsg(`Undangan untuk ${email} (${roleVal === 'admin' ? 'Admin' : 'Guru'}) berhasil disimpan. Guru dapat langsung masuk menggunakan akun Google tersebut.`, false);
+            teamMsg(`Peran ${roleVal === 'admin' ? 'Admin' : 'Guru'} untuk ${email} disimpan. Saat guru mendaftar dengan email ini, peran tersebut otomatis dipakai.`, false);
             await loadAdminTeam();
         } catch (err) {
             teamMsg('Gagal menyimpan undangan: ' + (err && err.message ? err.message : err), true);
@@ -535,10 +652,19 @@ const Auth = (() => {
         });
     }
 
+    function sessionToken() { return remote && typeof remote.sessionToken === 'function' ? remote.sessionToken() : ''; }
+
     return {
+        sessionToken,
         isCloudConfigured,
         boot,
-        loginGoogle,
+        submitLogin,
+        submitRegister,
+        showLogin,
+        showRegister,
+        togglePassword,
+        changePassword,
+        resetMemberPassword,
         retryGate,
         signOutFromGate,
         chooseDecision,

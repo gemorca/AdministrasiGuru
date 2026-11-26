@@ -38,3 +38,30 @@
             }
             closeConfirm();
         }
+
+        // ---------- Sidebar responsif (drawer di mobile) ----------
+        function isMobileLayout() { return window.matchMedia('(max-width: 767px)').matches; }
+        function openSidebar() {
+            const s = document.getElementById('sidebar'), o = document.getElementById('sidebarOverlay');
+            if (!s) return;
+            if (isMobileLayout()) {
+                s.classList.add('open');
+                if (o) o.classList.add('open');
+                document.body.classList.add('sidebar-open');
+            }
+        }
+        function closeSidebar() {
+            const s = document.getElementById('sidebar'), o = document.getElementById('sidebarOverlay');
+            if (s) s.classList.remove('open');
+            if (o) o.classList.remove('open');
+            document.body.classList.remove('sidebar-open');
+        }
+        function toggleSidebar() {
+            const s = document.getElementById('sidebar');
+            if (s && s.classList.contains('open')) closeSidebar(); else openSidebar();
+        }
+        document.addEventListener('click', e => {
+            if (e.target.closest && e.target.closest('#navMenu button, #navMenu a')) closeSidebar();
+        });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSidebar(); });
+        window.addEventListener('resize', () => { if (!isMobileLayout()) closeSidebar(); });
